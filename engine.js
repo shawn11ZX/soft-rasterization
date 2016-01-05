@@ -1,3 +1,4 @@
+/// <reference path="test.ts"/>
 function init() {
     var canv = document.createElement("canvas");
     canv.width = 1024;
@@ -6,49 +7,91 @@ function init() {
     var ctx = canv.getContext("2d");
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canv.width, canv.height);
-    testrasterize(ctx);
+    testLookAt(ctx);
+    // testPerspective(ctx);
+    // testRasterize(ctx);
+    // testScreen3d(ctx);
 }
-function testrasterize(ctx) {
-    var p1 = new Vertex();
-    p1.position = new Float3D(300, 0, 0);
-    p1.color = new Float3D(255, 0, 0);
-    var p2 = new Vertex();
-    p2.position = new Float3D(100, 300, 0);
-    p2.color = new Float3D(0, 255, 0);
-    var p3 = new Vertex();
-    p3.position = new Float3D(400, 600, 0);
-    p3.color = new Float3D(0, 0, 255);
-    rasterize(p1, p2, p3, ctx);
-    var transRight = new Float3D(400, 0, 0);
-    var p22 = new Vertex();
-    p22.position = new Float3D(900, 300, 0);
-    p22.color = new Float3D(0, 255, 0);
-    p1.position = p1.position.add(transRight);
-    p3.position = p3.position.add(transRight);
-    rasterize(p1, p22, p3, ctx);
-}
-var Float3D = (function () {
-    function Float3D(x1, y1, z1) {
-        this.x = x1;
-        this.y = y1;
-        this.z = z1;
-        this.w = 1;
+var Vector4 = (function () {
+    function Vector4(x, y, z, w) {
+        if (x === void 0) { x = 0; }
+        if (y === void 0) { y = 0; }
+        if (z === void 0) { z = 0; }
+        if (w === void 0) { w = 1; }
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
     }
-    Float3D.prototype.add = function (right) {
-        return new Float3D(this.x + right.x, this.y + right.y, this.z + right.z);
+    Vector4.prototype.add = function (right) {
+        return new Vector4(this.x + right.x, this.y + right.y, this.z + right.z);
     };
-    Float3D.prototype.multi = function (right) {
-        return new Float3D(this.x * right, this.y * right, this.z * right);
+    Vector4.prototype.sub = function (right) {
+        return new Vector4(this.x - right.x, this.y - right.y, this.z - right.z);
     };
-    return Float3D;
+    Vector4.prototype.multi = function (right) {
+        return new Vector4(this.x * right, this.y * right, this.z * right);
+    };
+    Vector4.prototype.cross = function (right) {
+        return new Vector4(this.y * right.z - this.z * right.y, this.z * right.x - this.x * right.z, this.x * right.y - this.y * right.x);
+    };
+    Vector4.prototype.length = function () {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+    };
+    Vector4.prototype.normalize = function () {
+        var len = this.length();
+        return new Vector4(this.x / len, this.y / len, this.z / len);
+    };
+    Vector4.prototype.clip = function () {
+        return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
+    };
+    Vector4.prototype.transform = function (m) {
+        var x = this.x * m.get(0, 0) + this.y * m.get(1, 0) + this.z * m.get(2, 0) + this.w * m.get(3, 0);
+        var y = this.x * m.get(0, 1) + this.y * m.get(1, 1) + this.z * m.get(2, 1) + this.w * m.get(3, 1);
+        var z = this.x * m.get(0, 2) + this.y * m.get(1, 2) + this.z * m.get(2, 2) + this.w * m.get(3, 2);
+        var w = this.x * m.get(0, 3) + this.y * m.get(1, 3) + this.z * m.get(2, 3) + this.w * m.get(3, 3);
+        return new Vector4(x, y, z, w);
+    };
+    return Vector4;
 })();
-var Matrix4 = (function () {
-    function Matrix4() {
+var Matrix44 = (function () {
+    function Matrix44() {
+        /** column major */
+        this.data = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+        this.data[0] = 1;
+        this.data[5] = 1;
+        this.data[10] = 1;
+        this.data[15] = 1;
     }
-    return Matrix4;
+    Matrix44.prototype.set = function (column, row, value) {
+        this.data[column * 4 + row] = value;
+    };
+    Matrix44.prototype.get = function (column, row) {
+        return this.data[column * 4 + row];
+    };
+    Matrix44.prototype.setColumn = function (column, v) {
+        this.data[column * 4 + 0] = v.x;
+        this.data[column * 4 + 1] = v.y;
+        this.data[column * 4 + 2] = v.z;
+        this.data[column * 4 + 3] = v.w;
+    };
+    Matrix44.prototype.transpose = function () {
+        for (var c = 0; c < 4; c++) {
+            for (var r = c; r < 4; r++) {
+                var t = this.data[c * 4 + r];
+                this.data[c * 4 + r] = this.data[r * 4 + c];
+                this.data[r * 4 + c] = t;
+            }
+        }
+    };
+    return Matrix44;
 })();
 var Vertex = (function () {
-    function Vertex() {
+    function Vertex(position, color) {
+        if (position === void 0) { position = new Vector4; }
+        if (color === void 0) { color = new Vector4; }
+        this.position = position;
+        this.color = color;
     }
     Object.defineProperty(Vertex.prototype, "x", {
         get: function () { return this.position.x; },
@@ -70,7 +113,48 @@ var Vertex = (function () {
         enumerable: true,
         configurable: true
     });
+    Vertex.prototype.transform = function (m) {
+        return new Vertex(this.position.transform(m), this.color);
+    };
     return Vertex;
+})();
+var Camera = (function () {
+    function Camera(fov, aspectRation, near, far) {
+        var d = Math.tan(fov * 3.14 / 180 / 2);
+        this.view2Clipping = new Matrix44();
+        this.view2Clipping.set(0, 0, d / aspectRation);
+        this.view2Clipping.set(1, 1, d);
+        this.view2Clipping.set(2, 2, (far + near) / (near - far));
+        this.view2Clipping.set(2, 3, -1);
+        this.view2Clipping.set(3, 2, 2 * near * far / (near - far));
+        this.view2Clipping.set(3, 3, 0);
+    }
+    Camera.prototype.lookAt = function (position, target, up) {
+        var dir = target.sub(position);
+        var right = dir.cross(up);
+        var y = right.cross(dir);
+        var v2w = new Matrix44();
+        v2w.setColumn(0, right.normalize());
+        v2w.setColumn(1, y.normalize());
+        v2w.setColumn(2, dir.normalize().multi(-1));
+        v2w.transpose();
+        var translate = position.transform(v2w).multi(-1);
+        v2w.setColumn(3, translate);
+        this.world2View = v2w;
+    };
+    return Camera;
+})();
+var Screen3D = (function () {
+    function Screen3D(width, height) {
+        this.ndc2screen = new Matrix44();
+        this.ndc2screen.set(0, 0, width / 2);
+        this.ndc2screen.set(1, 1, -height / 2);
+        this.ndc2screen.set(2, 2, 1 / 2);
+        this.ndc2screen.set(3, 0, width / 2);
+        this.ndc2screen.set(3, 1, height / 2);
+        this.ndc2screen.set(3, 2, 1 / 2);
+    }
+    return Screen3D;
 })();
 /**
  * Given three points with:
@@ -115,9 +199,6 @@ function rasterize(p1, p2, p3, ctx) {
         var diffX = ex - sx;
         for (var x = 0; x < diffX; x++) {
             var t3 = x / diffX;
-            if (gradientAC < gradientAB) {
-                t3 = 1 - t3;
-            }
             var recipZm = (1 - t3) * recipZs + t3 * recipZe;
             var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
             var cm = cmByzm.multi(1 / recipZm);
@@ -125,7 +206,7 @@ function rasterize(p1, p2, p3, ctx) {
              * rgb里必须是整数
              */
             ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-            ctx.fillRect(x + sx, y + pa.y, 1, 1);
+            ctx.fillRect(x + sx, y + Math.ceil(pa.y), 1, 1);
         }
     }
     diffY = pc.y - pb.y;
@@ -149,9 +230,6 @@ function rasterize(p1, p2, p3, ctx) {
         var diffX = ex - sx;
         for (var x = 0; x < diffX; x++) {
             var t3 = x / diffX;
-            if (gradientBC < gradientAC) {
-                t3 = 1 - t3;
-            }
             var recipZm = (1 - t3) * recipZs + t3 * recipZe;
             var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
             var cm = cmByzm.multi(1 / recipZm);
@@ -159,7 +237,7 @@ function rasterize(p1, p2, p3, ctx) {
              * rgb里必须是整数
              */
             ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-            ctx.fillRect(x + sx, y + pb.y, 1, 1);
+            ctx.fillRect(x + sx, y + Math.ceil(pb.y), 1, 1);
         }
     }
 }

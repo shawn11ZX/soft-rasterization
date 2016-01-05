@@ -1,4 +1,4 @@
-
+/// <reference path="test.ts"/>
 
 function init() {
     var canv = document.createElement("canvas");
@@ -8,76 +8,167 @@ function init() {
     var ctx = canv.getContext("2d");
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, canv.width, canv.height);
-    testrasterize(ctx);
+    testLookAt(ctx);
+    // testPerspective(ctx);
+    // testRasterize(ctx);
+    // testScreen3d(ctx);
 }
 
-function testrasterize(ctx:CanvasRenderingContext2D) {
-    var p1 = new Vertex();
-    p1.position = new Float3D(300, 0, 0);
-    p1.color = new Float3D(255, 0, 0);
-
-    var p2 = new Vertex();
-    p2.position = new Float3D(100, 300, 0);
-    p2.color = new Float3D(0, 255, 0);
-
-    var p3 = new Vertex();
-    p3.position = new Float3D(400, 600, 0);
-    p3.color = new Float3D(0, 0, 255);
-
-
-    rasterize(p1, p2, p3, ctx);
-
-    var transRight = new Float3D(400, 0, 0);
-
-    var p22 = new Vertex();
-    p22.position = new Float3D(900, 300, 0);
-    p22.color = new Float3D(0, 255, 0);
-    
-    p1.position = p1.position.add(transRight);
-    
-    p3.position = p3.position.add(transRight);
-    rasterize(p1, p22, p3, ctx);
-}
-
-class Float3D {
+class Vector4 {
     x: number;
     y: number;
     z: number;
     w: number;
 
-    constructor(x1: number, y1: number, z1: number) {
-        this.x = x1;
-        this.y = y1;
-        this.z = z1;
-        this.w = 1;
+    constructor(x: number = 0, y: number = 0, z: number = 0, w = 1) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
     }
 
-    public add(right: Float3D): Float3D {
-        return new Float3D(this.x + right.x, this.y + right.y, this.z + right.z);
+    public add(right: Vector4): Vector4 {
+        return new Vector4(this.x + right.x, this.y + right.y, this.z + right.z);
     }
 
-    public multi(right: number): Float3D {
-        return new Float3D(this.x * right, this.y * right, this.z * right);
+    public sub(right: Vector4): Vector4 {
+        return new Vector4(this.x - right.x, this.y - right.y, this.z - right.z);
+    }
+    public multi(right: number): Vector4 {
+        return new Vector4(this.x * right, this.y * right, this.z * right);
+    }
+    public cross(right: Vector4): Vector4 {
+        return new Vector4(this.y * right.z - this.z * right.y, this.z * right.x - this.x * right.z, this.x * right.y - this.y * right.x);
+    }
+
+    public length(): number {
+        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+    }
+    public normalize(): Vector4 {
+        var len = this.length();
+        return new Vector4(this.x / len, this.y / len, this.z / len);
+    }
+    public clip(): Vector4 {
+        return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
+    }
+
+    public transform(m: Matrix44): Vector4 {
+        var x = this.x * m.get(0, 0) + this.y * m.get(1, 0) + this.z * m.get(2, 0) + this.w * m.get(3, 0);
+        var y = this.x * m.get(0, 1) + this.y * m.get(1, 1) + this.z * m.get(2, 1) + this.w * m.get(3, 1);
+        var z = this.x * m.get(0, 2) + this.y * m.get(1, 2) + this.z * m.get(2, 2) + this.w * m.get(3, 2);
+        var w = this.x * m.get(0, 3) + this.y * m.get(1, 3) + this.z * m.get(2, 3) + this.w * m.get(3, 3);
+        return new Vector4(x, y, z, w);
     }
 }
 
-class Matrix4 {
-    x:Float3D;
-    y:Float3D;
-    z:Float3D;
-    w:Float3D;
+class Matrix44 {
+    
+    /** column major */
+    private data: number[] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+    constructor() {
+        this.data[0] = 1;
+        this.data[5] = 1;
+        this.data[10] = 1;
+        this.data[15] = 1;
+    }
+
+    public set(column: number, row: number, value: number) {
+        this.data[column * 4 + row] = value;
+    }
+
+    public get(column: number, row: number) {
+        return this.data[column * 4 + row];
+    }
+
+    public setColumn(column: number, v: Vector4) {
+        this.data[column * 4 + 0] = v.x;
+        this.data[column * 4 + 1] = v.y;
+        this.data[column * 4 + 2] = v.z;
+        this.data[column * 4 + 3] = v.w;
+    }
+
+    public transpose() {
+        for (var c = 0; c < 4; c++) {
+            for (var r = c; r < 4; r++) {
+                var t = this.data[c * 4 + r];
+                this.data[c * 4 + r] = this.data[r * 4 + c];
+                this.data[r * 4 + c] = t;
+            }
+        }
+    }
+
+    x: Vector4;
+    y: Vector4;
+    z: Vector4;
+    w: Vector4;
 }
 
 class Vertex {
-    position: Float3D;
-    color: Float3D;
+    position: Vector4;
+    color: Vector4;
 
+    constructor(position: Vector4 = new Vector4, color: Vector4 = new Vector4) {
+        this.position = position;
+        this.color = color;
+    }
     get x(): number { return this.position.x; }
     get y(): number { return this.position.y; }
     get z(): number { return this.position.z; }
     get w(): number { return this.position.w; }
+
+    public transform(m: Matrix44): Vertex {
+        return new Vertex(this.position.transform(m), this.color);
+    }
 }
 
+class Camera {
+    world2View: Matrix44;
+    view2Clipping: Matrix44;
+
+    constructor(fov: number, aspectRation: number, near: number, far: number) {
+        var d = Math.tan(fov * 3.14 / 180 / 2);
+        this.view2Clipping = new Matrix44();
+
+        this.view2Clipping.set(0, 0, d / aspectRation);
+        this.view2Clipping.set(1, 1, d);
+        this.view2Clipping.set(2, 2, (far + near) / (near - far));
+        this.view2Clipping.set(2, 3, -1);
+        this.view2Clipping.set(3, 2, 2 * near * far / (near - far));
+        this.view2Clipping.set(3, 3, 0);
+    }
+
+    public lookAt(position: Vector4, target: Vector4, up: Vector4) {
+
+        var dir = target.sub(position);
+        var right = dir.cross(up);
+        var y = right.cross(dir);
+
+        var v2w = new Matrix44();
+        v2w.setColumn(0, right.normalize());
+        v2w.setColumn(1, y.normalize());
+        v2w.setColumn(2, dir.normalize().multi(-1));
+        v2w.transpose();
+
+        var translate = position.transform(v2w).multi(-1);
+        v2w.setColumn(3, translate);
+
+        this.world2View = v2w;
+    }
+}
+
+class Screen3D {
+    ndc2screen: Matrix44;
+    constructor(width: number, height: number) {
+        this.ndc2screen = new Matrix44();
+        this.ndc2screen.set(0, 0, width / 2);
+        this.ndc2screen.set(1, 1, -height / 2);
+        this.ndc2screen.set(2, 2, 1 / 2);
+        this.ndc2screen.set(3, 0, width / 2);
+        this.ndc2screen.set(3, 1, height / 2);
+        this.ndc2screen.set(3, 2, 1 / 2);
+    }
+}
 /**
  * Given three points with:
  * - position in screen space
@@ -85,12 +176,12 @@ class Vertex {
  * Draw the triangle 
  */
 function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingContext2D) {
-    
+
     ctx.fillStyle = "rgb(255,255,255)";
     ctx.fillRect(p1.x, p1.y, 2, 2);
     ctx.fillRect(p2.x, p2.y, 2, 2);
     ctx.fillRect(p3.x, p3.y, 2, 2);
-            
+
     var vertexArray: Array<Vertex> = [p1, p2, p3];
     vertexArray.sort((a, b) => a.position.y - b.position.y);
     var pa = vertexArray[0];
@@ -102,11 +193,11 @@ function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingConte
      * Y/X会导致不统一，换成X/Y
      */
     var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
-    var gradientAB = (pb.x - pa.x) / (pb.y - pa.y) ;
-    var gradientAC = (pc.x - pa.x) / (pc.y - pa.y) ;
+    var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
+    var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
     for (var y = 0; y < diffY; y++) {
-        
-        
+
+
         var t1 = y / (pb.y - pa.y);
         var t2 = y / (pc.y - pa.y);
 
@@ -133,9 +224,7 @@ function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingConte
 
         for (var x = 0; x < diffX; x++) {
             var t3 = x / diffX;
-            if (gradientAC < gradientAB) {
-                t3 = 1 - t3;
-            }
+            
             var recipZm = (1 - t3) * recipZs + t3 * recipZe;
             var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
             var cm = cmByzm.multi(1 / recipZm);
@@ -144,18 +233,18 @@ function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingConte
              * rgb里必须是整数
              */
             ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-            ctx.fillRect(x + sx, y + pa.y, 1, 1);
-            
+            ctx.fillRect(x + sx, y + Math.ceil(pa.y), 1, 1);
+
         }
 
     }
-    
+
     diffY = pc.y - pb.y;
     for (var y = 0; y < diffY; y++) {
 
-        
-        var t1 = (diffY-y) / (pc.y - pb.y);
-        var t2 = (diffY-y) / (pc.y - pa.y);
+
+        var t1 = (diffY - y) / (pc.y - pb.y);
+        var t2 = (diffY - y) / (pc.y - pa.y);
 
         var sx = Math.ceil(pc.x + t1 * (pb.x - pc.x));
         var ex = Math.ceil(pc.x + t2 * (pa.x - pc.x));
@@ -179,9 +268,7 @@ function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingConte
 
         for (var x = 0; x < diffX; x++) {
             var t3 = x / diffX;
-            if (gradientBC < gradientAC) {
-                t3 = 1 - t3;
-            }
+          
             var recipZm = (1 - t3) * recipZs + t3 * recipZe;
             var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
             var cm = cmByzm.multi(1 / recipZm);
@@ -190,8 +277,8 @@ function rasterize(p1: Vertex, p2: Vertex, p3: Vertex, ctx: CanvasRenderingConte
              * rgb里必须是整数
              */
             ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-            ctx.fillRect(x + sx, y + pb.y, 1, 1);
-            
+            ctx.fillRect(x + sx, y + Math.ceil(pb.y), 1, 1);
+
         }
 
     }
