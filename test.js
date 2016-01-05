@@ -28,7 +28,7 @@ function testPerspective() {
     var p2 = new Vector4(-30, -30, -50);
     var p3 = new Vector4(30, -30, -50);
     var screen = new Screen3D(1024, 768);
-    var camera = new Camera3D(90, 5 / 4, 0.01, 1000);
+    var camera = new Camera3D(screen, 90, 5 / 4, 0.01, 1000);
     var v1 = new Vertex3D(p1.transform(camera.view2Clipping).clip().transform(screen.ndc2screen), new Vector4(255, 0, 0));
     var v2 = new Vertex3D(p2.transform(camera.view2Clipping).clip().transform(screen.ndc2screen), new Vector4(0, 255, 0));
     var v3 = new Vertex3D(p3.transform(camera.view2Clipping).clip().transform(screen.ndc2screen), new Vector4(0, 0, 255));
@@ -39,7 +39,7 @@ function testLookAt() {
     var p2 = new Vector4(-30, 0, 0);
     var p3 = new Vector4(0, -30, 0);
     var screen = new Screen3D(1024, 768);
-    var camera = new Camera3D(90, 5 / 4, 0.01, 1000);
+    var camera = new Camera3D(screen, 90, 5 / 4, 0.01, 1000);
     camera.lookAt(new Vector4(0, 0, -100), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0));
     var v1 = new Vertex3D(p1.transform(camera.world2View).transform(camera.view2Clipping).clip().transform(screen.ndc2screen), new Vector4(255, 0, 0));
     var v2 = new Vertex3D(p2.transform(camera.world2View).transform(camera.view2Clipping).clip().transform(screen.ndc2screen), new Vector4(0, 255, 0));
@@ -48,14 +48,15 @@ function testLookAt() {
 }
 function main() {
     var screen = new Screen3D(1027, 768);
-    var camera = new Camera3D(90, 5 / 4, 0.01, 100000);
+    var camera = new Camera3D(screen, 90, 5 / 4, 0.01, 100000);
     camera.lookAt(new Vector4(0, 0, 50), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0));
     var scene = new Scene3D();
     var obj = new Object3D(new CubeGeometry());
+    obj.matrix.scale(20, 10, 10);
     scene.addObject(obj);
     scene.setCamera(camera);
     scene.setScreen(screen);
-    scene.render();
+    scene.start();
 }
 //testRasterize();
 // testScreen3d();

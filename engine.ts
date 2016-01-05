@@ -89,10 +89,11 @@ class Matrix44 {
 
     public scale(x:number, y:number, z:number) {
         this.set(0, 0, this.get(0, 0) * x);
-        this.set(1, 1, this.get(1, 1) * x);
-        this.set(2, 2, this.get(2, 2) * x);
-        
+        this.set(1, 1, this.get(1, 1) * y);
+        this.set(2, 2, this.get(2, 2) * z);
     }
+    
+    
 
     x: Vector4;
     y: Vector4;
@@ -119,8 +120,12 @@ class Vertex3D {
 class Camera3D {
     world2View: Matrix44;
     view2Clipping: Matrix44;
-
-    constructor(fov: number, aspectRation: number, near: number, far: number) {
+    position:Vector4;
+    target:Vector4;
+    up:Vector4;
+    screen:Screen3D;
+    constructor(screen:Screen3D, fov: number, aspectRation: number, near: number, far: number) {
+        this.screen = screen;
         var d = Math.tan(fov * 3.14 / 180 / 2);
         this.view2Clipping = new Matrix44();
 
@@ -130,10 +135,24 @@ class Camera3D {
         this.view2Clipping.set(2, 3, -1);
         this.view2Clipping.set(3, 2, 2 * near * far / (near - far));
         this.view2Clipping.set(3, 3, 0);
+        
+        window.addWheelListener(screen.canvas, (e) => this.onZoom(e));
+    }
+    
+    private onZoom(event) {
+        
+        var length = this.target.sub(this.position).length();
+        this.position = this.target.add(this.position.sub(this.target).multi((length+event.deltaY/10)/length));
+        this.lookAt(this.position, this.target, this.up);
+        console.log(length);
     }
 
+    
     public lookAt(position: Vector4, target: Vector4, up: Vector4) {
-
+        this.position = position;
+        this.target = target;
+        this.up = up;
+        
         var dir = target.sub(position);
         var right = dir.cross(up);
         var y = right.cross(dir);
@@ -154,6 +173,7 @@ class Camera3D {
 class Screen3D {
     ndc2screen: Matrix44;
     ctx:CanvasRenderingContext2D;
+    canvas:HTMLCanvasElement;
     constructor(width: number, height: number) {
         this.ndc2screen = new Matrix44();
         this.ndc2screen.set(0, 0, width / 2);
@@ -163,13 +183,20 @@ class Screen3D {
         this.ndc2screen.set(3, 1, height / 2);
         this.ndc2screen.set(3, 2, 1 / 2);
         
-        var canv = document.createElement("canvas");
-        canv.width = width;
-        canv.height = height;
-        document.body.appendChild(canv);
-        this.ctx = canv.getContext("2d");
+        this.canvas = document.createElement("canvas");
+        this.canvas.width = width;
+        this.canvas.height = height;
+        
+        document.body.appendChild(this.canvas);
+        this.ctx = this.canvas.getContext("2d");
         this.ctx.fillStyle = "#000000";
-        this.ctx.fillRect(0, 0, canv.width, canv.height);
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        
+    }
+    
+    clear() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
 
@@ -308,6 +335,7 @@ class Scene3D {
     }
 
     public render() {
+        this.screen.clear();
         for (var o = 0; o < this.objectArray.length; o++) {
             var obj = this.objectArray[o];
             var triangleNum = obj.geometry.indexArray.length / 3;
@@ -324,8 +352,16 @@ class Scene3D {
                 var ps2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
 
                 this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
+                
+                
             }
+            console.log("render");
         }
+    }
+    
+    public start() {
+        this.render();
+        requestAnimationFrame(() => this.start());
     }
 }
 
@@ -348,15 +384,15 @@ class CubeGeometry implements Geometry3D {
     indexArray: number[] = new Array();
 
     constructor() {
-        this.vertexArray.push(new Vertex3D(new Vector4(-10, 10, 10), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(10, 10, 10), new Vector4(0, 255, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-10, -10, 10), new Vector4(0, 0, 255)));
-        this.vertexArray.push(new Vertex3D(new Vector4(10, -10, 10), new Vector4(255, 255, 255)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, 1), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, 1), new Vector4(0, 255, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, 1), new Vector4(0, 0, 255)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, 1), new Vector4(255, 255, 255)));
 
-        this.vertexArray.push(new Vertex3D(new Vector4(-10, 10, -10), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(10, 10, -10), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-10, -10, -10), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(10, -10, -10), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, -1), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, -1), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, -1), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, -1), new Vector4(255, 0, 0)));
         
         // 前
         this.indexArray.push(0, 2, 3);
@@ -383,4 +419,5 @@ class CubeGeometry implements Geometry3D {
         this.indexArray.push(3, 6, 7);
     }
 }
+
 
