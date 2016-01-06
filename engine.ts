@@ -212,6 +212,13 @@ class Screen3D {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
+    round(n:number) : number {
+        if (n - Math.floor(n) > 0.5)
+            n = Math.floor(n) + 1;
+        else 
+            n = Math.floor(n);
+        return n;
+    }
 
     /**
      * Given three points with:
@@ -232,26 +239,32 @@ class Screen3D {
         var pb = vertexArray[1];
         var pc = vertexArray[2];
 
-        var diffY = pb.y - pa.y;
+        var diffYup = Math.ceil(pb.y - pa.y);
         /**
          * Y/X会导致不统一，换成X/Y
          */
         var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
         var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
         var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
+        
+        var roundAy = Math.round(pa.y);
+        var roundBy = Math.round(pb.y);
+        var roundCy = Math.round(pc.y);
+        
+        for (var y = roundAy; y < roundBy; y++) {
 
-        for (var y = 0; y < diffY; y++) {
-
-
-            var t1 = y / (pb.y - pa.y);
-            var t2 = y / (pc.y - pa.y);
-
+            var t1 = (y - pa.y) / (pb.y - pa.y);
+            var t2 = (y - pa.y) / (pc.y - pa.y);
+            
+            if (t1 < 0)
+                t1 = 0;
+            if (t2 < 0)
+                t2 = 0;
             /**
              * 不取整会导致波纹效果
              */
-            var sx = Math.ceil(pa.x + t1 * (pb.x - pa.x));
-            var ex = Math.ceil(pa.x + t2 * (pc.x - pa.x));
-
+            var sx = pa.x + t1 * (pb.x - pa.x);
+            var ex = pa.x + t2 * (pc.x - pa.x);
 
 
             var csByZs = pa.color.multi((1 - t1) / pa.w).add(pb.color.multi(t1 / pb.w));
@@ -263,12 +276,16 @@ class Screen3D {
                 csByZs = [ceByZe, ceByZe = csByZs][0];
                 recipZs = [recipZe, recipZe = recipZs][0];
             }
-
+            
+            
+            var roundsx = Math.round(sx);
+            var roundex = Math.round(ex);
+                          
             var diffX = ex - sx;
 
 
-            for (var x = 0; x < diffX; x++) {
-                var t3 = x / diffX;
+            for (var x = roundsx; x < roundex; x++) {
+                var t3 = (x - sx) / diffX;
 
                 var recipZm = (1 - t3) * recipZs + t3 * recipZe;
                 var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
@@ -278,27 +295,33 @@ class Screen3D {
                  * rgb里必须是整数
                  */
                 this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-                this.ctx.fillRect(x + sx, y + Math.ceil(pa.y), 1, 1);
+                this.ctx.fillRect(x, y, 1, 1);
 
             }
 
         }
+        
+        
 
-        diffY = pc.y - pb.y;
-        for (var y = 0; y < diffY; y++) {
+        
+        for (var y = roundBy; y < roundCy; y++) {
+
+            var t1 = (y - pb.y) / (pc.y - pb.y);
+            var t2 = (y - pa.y) / (pc.y - pa.y);
+            
+            if (t1 < 0)
+                t1 = 0;
+            if (t2 < 0)
+                t2 = 0;
+                
+            var sx = pb.x + t1 * (pc.x - pb.x);
+            var ex = pa.x + t2 * (pc.x - pa.x);
 
 
-            var t1 = (diffY - y) / (pc.y - pb.y);
-            var t2 = (diffY - y) / (pc.y - pa.y);
-
-            var sx = Math.ceil(pc.x + t1 * (pb.x - pc.x));
-            var ex = Math.ceil(pc.x + t2 * (pa.x - pc.x));
-
-
-            var csByZs = pc.color.multi((1 - t1) / pc.w).add(pb.color.multi(t1 / pb.w));
-            var ceByZe = pc.color.multi((1 - t2) / pc.w).add(pa.color.multi(t2 / pa.w));
-            var recipZs = (1 - t1) / pc.w + t1 / pb.w;
-            var recipZe = (1 - t2) / pc.w + t2 / pa.w;
+            var csByZs = pc.color.multi((t1) / pc.w).add(pb.color.multi((1-t1) / pb.w));
+            var ceByZe = pc.color.multi((t2) / pc.w).add(pa.color.multi((1-t2) / pa.w));
+            var recipZs = (t1) / pc.w + (1-t1) / pb.w;
+            var recipZe = (t2) / pc.w + (1-t2) / pa.w;
             
             /**
              * 三角形的下半部分，左边的边gradient更大
@@ -309,10 +332,13 @@ class Screen3D {
                 recipZs = [recipZe, recipZe = recipZs][0];
             }
 
+           var roundsx = Math.round(sx);
+           var roundex = Math.round(ex);
+                
             var diffX = ex - sx;
 
-            for (var x = 0; x < diffX; x++) {
-                var t3 = x / diffX;
+            for (var x = roundsx; x < roundex; x++) {
+                var t3 = (x - sx) / diffX;
 
                 var recipZm = (1 - t3) * recipZs + t3 * recipZe;
                 var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
@@ -322,7 +348,7 @@ class Screen3D {
                  * rgb里必须是整数
                  */
                 this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-                this.ctx.fillRect(x + sx, y + Math.ceil(pb.y), 1, 1);
+                this.ctx.fillRect(x, y, 1, 1);
 
             }
 
@@ -456,6 +482,10 @@ class Scene3D {
                 var pc2 = pv2.transform(this.camera.view2Clipping);
                 var ps2 = pc2.clip().transform(this.screen.ndc2screen);
 
+                
+                ps0.w = pv0.w;
+                ps1.w = pv1.w;
+                ps2.w = pv2.w;
 
                 var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                 if (pv0.dot(normal) < 0) {
