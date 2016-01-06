@@ -31,7 +31,11 @@ class Vector4 {
     }
 
     public length(): number {
-        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        return Math.sqrt(this.dot(this));
+    }
+    
+    public dot(right:Vector4): number {
+        return this.x * right.x + this.y * right.y + this.z * right.z;
     }
     public normalize(): Vector4 {
         var len = this.length();
@@ -87,13 +91,22 @@ class Matrix44 {
         }
     }
 
-    public scale(x:number, y:number, z:number) {
+    public scale(x: number, y: number, z: number) {
         this.set(0, 0, this.get(0, 0) * x);
         this.set(1, 1, this.get(1, 1) * y);
         this.set(2, 2, this.get(2, 2) * z);
     }
-    
-    
+
+    public static createRotateY(angle:number):Matrix44 {
+        var m = new Matrix44();
+        var cos = Math.cos(angle );
+        var sin = Math.sin(angle );
+        m.set(0, 0, cos);
+        m.set(0, 2, -1 * sin);
+        m.set(2, 0, sin);
+        m.set(2, 2, cos);
+        return m;
+    }
 
     x: Vector4;
     y: Vector4;
@@ -120,13 +133,13 @@ class Vertex3D {
 class Camera3D {
     world2View: Matrix44;
     view2Clipping: Matrix44;
-    position:Vector4;
-    target:Vector4;
-    up:Vector4;
-    screen:Screen3D;
-    constructor(screen:Screen3D, fov: number, aspectRation: number, near: number, far: number) {
+    position: Vector4;
+    target: Vector4;
+    up: Vector4;
+    screen: Screen3D;
+    constructor(screen: Screen3D, fov: number, aspectRation: number, near: number, far: number) {
         this.screen = screen;
-        var d = Math.tan(fov * 3.14 / 180 / 2);
+        var d = Math.tan(fov / 2);
         this.view2Clipping = new Matrix44();
 
         this.view2Clipping.set(0, 0, d / aspectRation);
@@ -135,24 +148,24 @@ class Camera3D {
         this.view2Clipping.set(2, 3, -1);
         this.view2Clipping.set(3, 2, 2 * near * far / (near - far));
         this.view2Clipping.set(3, 3, 0);
-        
+
         window.addWheelListener(screen.canvas, (e) => this.onZoom(e));
     }
-    
+
     private onZoom(event) {
-        
+
         var length = this.target.sub(this.position).length();
-        this.position = this.target.add(this.position.sub(this.target).multi((length+event.deltaY/10)/length));
+        this.position = this.target.add(this.position.sub(this.target).multi((length + event.deltaY / 10) / length));
         this.lookAt(this.position, this.target, this.up);
         console.log(length);
     }
 
-    
+
     public lookAt(position: Vector4, target: Vector4, up: Vector4) {
         this.position = position;
         this.target = target;
         this.up = up;
-        
+
         var dir = target.sub(position);
         var right = dir.cross(up);
         var y = right.cross(dir);
@@ -172,8 +185,8 @@ class Camera3D {
 
 class Screen3D {
     ndc2screen: Matrix44;
-    ctx:CanvasRenderingContext2D;
-    canvas:HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    canvas: HTMLCanvasElement;
     constructor(width: number, height: number) {
         this.ndc2screen = new Matrix44();
         this.ndc2screen.set(0, 0, width / 2);
@@ -182,19 +195,19 @@ class Screen3D {
         this.ndc2screen.set(3, 0, width / 2);
         this.ndc2screen.set(3, 1, height / 2);
         this.ndc2screen.set(3, 2, 1 / 2);
-        
+
         this.canvas = document.createElement("canvas");
         this.canvas.width = width;
         this.canvas.height = height;
-        
+
         document.body.appendChild(this.canvas);
         this.ctx = this.canvas.getContext("2d");
         this.ctx.fillStyle = "#000000";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        
+
+
     }
-    
+
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
@@ -226,6 +239,7 @@ class Screen3D {
         var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
         var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
         var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
+
         for (var y = 0; y < diffY; y++) {
 
 
@@ -317,53 +331,6 @@ class Screen3D {
 }
 
 
-class Scene3D {
-    objectArray: Object3D[] = new Array();
-    camera: Camera3D;
-    screen: Screen3D;
-
-    public setCamera(camera: Camera3D) {
-        this.camera = camera;
-    }
-
-    public setScreen(screen: Screen3D) {
-        this.screen = screen;
-    }
-
-    public addObject(obj: Object3D) {
-        this.objectArray.push(obj);
-    }
-
-    public render() {
-        this.screen.clear();
-        for (var o = 0; o < this.objectArray.length; o++) {
-            var obj = this.objectArray[o];
-            var triangleNum = obj.geometry.indexArray.length / 3;
-            for (var i = 0; i < triangleNum; i++) {
-                var i0 = obj.geometry.indexArray[i * 3 + 0];
-                var i1 = obj.geometry.indexArray[i * 3 + 1];
-                var i2 = obj.geometry.indexArray[i * 3 + 2];
-                var pm0 = obj.geometry.vertexArray[i0];
-                var pm1 = obj.geometry.vertexArray[i1];
-                var pm2 = obj.geometry.vertexArray[i2];
-
-                var ps0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-                var ps1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-                var ps2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-
-                this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
-                
-                
-            }
-            console.log("render");
-        }
-    }
-    
-    public start() {
-        this.render();
-        requestAnimationFrame(() => this.start());
-    }
-}
 
 class Object3D {
     constructor(geometry: Geometry3D) {
@@ -421,3 +388,147 @@ class CubeGeometry implements Geometry3D {
 }
 
 
+/*
+ * Y is up
+ */
+
+class SphericalCoodinate {
+    theta:number; // in radius
+    length:number;
+    phy:number;
+    
+    fromCartesian(v:Vector4) {
+        this.length = v.length();
+        this.theta = Math.atan2(v.z, v.x);
+        this.phy = Math.atan2(Math.sqrt(v.x * v.x + v.z * v.z), v.y);
+    }
+    
+    toCartesian(): Vector4 {
+        var r = this.length * Math.sin(this.phy);
+        var y =  this.length * Math.cos(this.phy);
+        var x = r * Math.cos(this.theta);
+        var z = r * Math.sin(this.theta);
+        var v = new Vector4(x, y, z);
+        return v;
+    }
+}
+
+
+class Scene3D {
+    objectArray: Object3D[] = new Array();
+    camera: Camera3D;
+    screen: Screen3D;
+
+    public setCamera(camera: Camera3D) {
+        this.camera = camera;
+    }
+
+    public setScreen(screen: Screen3D) {
+        this.screen = screen;
+    }
+
+    public addObject(obj: Object3D) {
+        this.objectArray.push(obj);
+    }
+
+    public render() {
+        this.screen.clear();
+        for (var o = 0; o < this.objectArray.length; o++) {
+            var obj = this.objectArray[o];
+            var triangleNum = obj.geometry.indexArray.length / 3;
+            for (var i = 0; i < triangleNum; i++) {
+                var i0 = obj.geometry.indexArray[i * 3 + 0];
+                var i1 = obj.geometry.indexArray[i * 3 + 1];
+                var i2 = obj.geometry.indexArray[i * 3 + 2];
+                var pm0 = obj.geometry.vertexArray[i0];
+                var pm1 = obj.geometry.vertexArray[i1];
+                var pm2 = obj.geometry.vertexArray[i2];
+
+                var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc0 = pv0.transform(this.camera.view2Clipping);
+                var ps0 = pc0.clip().transform(this.screen.ndc2screen);
+
+                var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc1 = pv1.transform(this.camera.view2Clipping);
+                var ps1 = pc1.clip().transform(this.screen.ndc2screen);
+
+                var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc2 = pv2.transform(this.camera.view2Clipping);
+                var ps2 = pc2.clip().transform(this.screen.ndc2screen);
+
+
+                var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
+                if (pv0.dot(normal) < 0) {
+                    this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
+                }
+
+            }
+
+        }
+        
+        requestAnimationFrame(() => this.render());
+    }
+
+    public start() {
+
+        requestAnimationFrame(() => this.render());
+
+        window.addEventListener("keypress", (e) => this.onKeyDown(e), false)
+    }
+
+    public onKeyDown(e) {
+        //W
+        if (e.charCode == 'w'.charCodeAt(0)) {
+            var v = this.camera.position.sub(this.camera.target);
+            var s = new SphericalCoodinate();
+            s.fromCartesian(v);
+            
+            s.phy += -5 * 3.14 / 180;
+            if (s.phy < 0)
+                return;
+            v = s.toCartesian();
+            
+            var newPosition = this.camera.target.add(v);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            
+        }
+
+        // S
+        if (e.charCode == 's'.charCodeAt(0)) {
+            
+            var v = this.camera.position.sub(this.camera.target);
+            var s = new SphericalCoodinate();
+            s.fromCartesian(v);
+            
+            s.phy += 5 * 3.14 / 180;
+            
+            if (s.phy > 3.14)
+                return;
+                
+            v = s.toCartesian();
+            
+            var newPosition = this.camera.target.add(v);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            
+            
+        }
+        
+        // A
+        if (e.charCode == 'a'.charCodeAt(0)) {
+            var m = Matrix44.createRotateY(-5 * 3.14 / 180 );
+            var newDir = this.camera.position.sub(this.camera.target).transform(m);
+            var newPosition = this.camera.target.add(newDir);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            console.log("5")
+        }
+
+        // D
+        if (e.charCode == 'd'.charCodeAt(0)) {
+            var m = Matrix44.createRotateY(5 * 3.14 / 180);
+            var newDir = this.camera.position.sub(this.camera.target).transform(m);
+            var newPosition = this.camera.target.add(newDir);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            console.log("-5")
+        }
+    }
+}

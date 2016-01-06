@@ -23,7 +23,10 @@ var Vector4 = (function () {
         return new Vector4(this.y * right.z - this.z * right.y, this.z * right.x - this.x * right.z, this.x * right.y - this.y * right.x);
     };
     Vector4.prototype.length = function () {
-        return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        return Math.sqrt(this.dot(this));
+    };
+    Vector4.prototype.dot = function (right) {
+        return this.x * right.x + this.y * right.y + this.z * right.z;
     };
     Vector4.prototype.normalize = function () {
         var len = this.length();
@@ -76,6 +79,16 @@ var Matrix44 = (function () {
         this.set(1, 1, this.get(1, 1) * y);
         this.set(2, 2, this.get(2, 2) * z);
     };
+    Matrix44.createRotateY = function (angle) {
+        var m = new Matrix44();
+        var cos = Math.cos(angle);
+        var sin = Math.sin(angle);
+        m.set(0, 0, cos);
+        m.set(0, 2, -1 * sin);
+        m.set(2, 0, sin);
+        m.set(2, 2, cos);
+        return m;
+    };
     return Matrix44;
 })();
 var Vertex3D = (function () {
@@ -111,7 +124,7 @@ var Camera3D = (function () {
     function Camera3D(screen, fov, aspectRation, near, far) {
         var _this = this;
         this.screen = screen;
-        var d = Math.tan(fov * 3.14 / 180 / 2);
+        var d = Math.tan(fov / 2);
         this.view2Clipping = new Matrix44();
         this.view2Clipping.set(0, 0, d / aspectRation);
         this.view2Clipping.set(1, 1, d);
@@ -252,46 +265,6 @@ var Screen3D = (function () {
     };
     return Screen3D;
 })();
-var Scene3D = (function () {
-    function Scene3D() {
-        this.objectArray = new Array();
-    }
-    Scene3D.prototype.setCamera = function (camera) {
-        this.camera = camera;
-    };
-    Scene3D.prototype.setScreen = function (screen) {
-        this.screen = screen;
-    };
-    Scene3D.prototype.addObject = function (obj) {
-        this.objectArray.push(obj);
-    };
-    Scene3D.prototype.render = function () {
-        this.screen.clear();
-        for (var o = 0; o < this.objectArray.length; o++) {
-            var obj = this.objectArray[o];
-            var triangleNum = obj.geometry.indexArray.length / 3;
-            for (var i = 0; i < triangleNum; i++) {
-                var i0 = obj.geometry.indexArray[i * 3 + 0];
-                var i1 = obj.geometry.indexArray[i * 3 + 1];
-                var i2 = obj.geometry.indexArray[i * 3 + 2];
-                var pm0 = obj.geometry.vertexArray[i0];
-                var pm1 = obj.geometry.vertexArray[i1];
-                var pm2 = obj.geometry.vertexArray[i2];
-                var ps0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-                var ps1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-                var ps2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View).transform(this.camera.view2Clipping).clip().transform(this.screen.ndc2screen);
-                this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
-            }
-            console.log("render");
-        }
-    };
-    Scene3D.prototype.start = function () {
-        var _this = this;
-        this.render();
-        requestAnimationFrame(function () { return _this.start(); });
-    };
-    return Scene3D;
-})();
 var Object3D = (function () {
     function Object3D(geometry) {
         this.geometry = geometry;
@@ -331,5 +304,118 @@ var CubeGeometry = (function () {
         this.indexArray.push(3, 6, 7);
     }
     return CubeGeometry;
+})();
+/*
+ * Y is up
+ */
+var SphericalCoodinate = (function () {
+    function SphericalCoodinate() {
+    }
+    SphericalCoodinate.prototype.fromCartesian = function (v) {
+        this.length = v.length();
+        this.theta = Math.atan2(v.z, v.x);
+        this.phy = Math.atan2(Math.sqrt(v.x * v.x + v.z * v.z), v.y);
+    };
+    SphericalCoodinate.prototype.toCartesian = function () {
+        var r = this.length * Math.sin(this.phy);
+        var y = this.length * Math.cos(this.phy);
+        var x = r * Math.cos(this.theta);
+        var z = r * Math.sin(this.theta);
+        var v = new Vector4(x, y, z);
+        return v;
+    };
+    return SphericalCoodinate;
+})();
+var Scene3D = (function () {
+    function Scene3D() {
+        this.objectArray = new Array();
+    }
+    Scene3D.prototype.setCamera = function (camera) {
+        this.camera = camera;
+    };
+    Scene3D.prototype.setScreen = function (screen) {
+        this.screen = screen;
+    };
+    Scene3D.prototype.addObject = function (obj) {
+        this.objectArray.push(obj);
+    };
+    Scene3D.prototype.render = function () {
+        var _this = this;
+        this.screen.clear();
+        for (var o = 0; o < this.objectArray.length; o++) {
+            var obj = this.objectArray[o];
+            var triangleNum = obj.geometry.indexArray.length / 3;
+            for (var i = 0; i < triangleNum; i++) {
+                var i0 = obj.geometry.indexArray[i * 3 + 0];
+                var i1 = obj.geometry.indexArray[i * 3 + 1];
+                var i2 = obj.geometry.indexArray[i * 3 + 2];
+                var pm0 = obj.geometry.vertexArray[i0];
+                var pm1 = obj.geometry.vertexArray[i1];
+                var pm2 = obj.geometry.vertexArray[i2];
+                var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc0 = pv0.transform(this.camera.view2Clipping);
+                var ps0 = pc0.clip().transform(this.screen.ndc2screen);
+                var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc1 = pv1.transform(this.camera.view2Clipping);
+                var ps1 = pc1.clip().transform(this.screen.ndc2screen);
+                var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
+                var pc2 = pv2.transform(this.camera.view2Clipping);
+                var ps2 = pc2.clip().transform(this.screen.ndc2screen);
+                var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
+                if (pv0.dot(normal) < 0) {
+                    this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
+                }
+            }
+        }
+        requestAnimationFrame(function () { return _this.render(); });
+    };
+    Scene3D.prototype.start = function () {
+        var _this = this;
+        requestAnimationFrame(function () { return _this.render(); });
+        window.addEventListener("keypress", function (e) { return _this.onKeyDown(e); }, false);
+    };
+    Scene3D.prototype.onKeyDown = function (e) {
+        //W
+        if (e.charCode == 'w'.charCodeAt(0)) {
+            var v = this.camera.position.sub(this.camera.target);
+            var s = new SphericalCoodinate();
+            s.fromCartesian(v);
+            s.phy += -5 * 3.14 / 180;
+            if (s.phy < 0)
+                return;
+            v = s.toCartesian();
+            var newPosition = this.camera.target.add(v);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+        }
+        // S
+        if (e.charCode == 's'.charCodeAt(0)) {
+            var v = this.camera.position.sub(this.camera.target);
+            var s = new SphericalCoodinate();
+            s.fromCartesian(v);
+            s.phy += 5 * 3.14 / 180;
+            if (s.phy > 3.14)
+                return;
+            v = s.toCartesian();
+            var newPosition = this.camera.target.add(v);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+        }
+        // A
+        if (e.charCode == 'a'.charCodeAt(0)) {
+            var m = Matrix44.createRotateY(-5 * 3.14 / 180);
+            var newDir = this.camera.position.sub(this.camera.target).transform(m);
+            var newPosition = this.camera.target.add(newDir);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            console.log("5");
+        }
+        // D
+        if (e.charCode == 'd'.charCodeAt(0)) {
+            var m = Matrix44.createRotateY(5 * 3.14 / 180);
+            var newDir = this.camera.position.sub(this.camera.target).transform(m);
+            var newPosition = this.camera.target.add(newDir);
+            this.camera.lookAt(newPosition, this.camera.target, this.camera.up);
+            console.log("-5");
+        }
+    };
+    return Scene3D;
 })();
 //# sourceMappingURL=engine.js.map
