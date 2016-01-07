@@ -102,14 +102,14 @@ function testPerspective2() {
     console.log(p2p.clip());
 }
 function main() {
-    var screen = new Screen3D(1027, 768);
+    var screen = new Screen3D(1024, 768);
     var camera = new Camera3D(screen, 90 * 3.14 / 180, 5 / 4, 1, 100);
     camera.lookAt(new Vector4(0, 0, 50), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0));
     var scene = new Scene3D();
     var texture = new Texture3D(256, 256);
-    var obj = new Object3D(new CubeGeometry(), texture);
-    obj.matrix.scale(20, 10, 10);
-    scene.addObject(obj);
+    var cube = new Cube3D();
+    cube.matrix.scale(20, 10, 10);
+    scene.addObject(cube);
     scene.setCamera(camera);
     scene.setScreen(screen);
     scene.start(RenderMode.Texture);

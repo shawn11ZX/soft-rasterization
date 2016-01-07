@@ -1,4 +1,9 @@
 /// <reference path="test.ts"/>
+var __extends = (this && this.__extends) || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    function __() { this.constructor = d; }
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+};
 var Vector4 = (function () {
     function Vector4(x, y, z, w) {
         if (x === void 0) { x = 0; }
@@ -178,13 +183,26 @@ var Screen3D = (function () {
         this.canvas = document.createElement("canvas");
         this.canvas.width = width;
         this.canvas.height = height;
-        document.body.appendChild(this.canvas);
         this.ctx = this.canvas.getContext("2d");
-        this.ctx.fillStyle = "#000000";
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        document.body.appendChild(this.canvas);
+        this.offline_canvas = document.createElement("canvas");
+        this.offline_canvas.width = width;
+        this.offline_canvas.height = height;
+        this.offline_ctx = this.offline_canvas.getContext("2d");
+        this.imageData = this.offline_ctx.createImageData(width, height);
+        this.rasterizer = new Rasterizer(RenderMode.Texture, this.imageData);
     }
-    Screen3D.prototype.clear = function () {
+    Screen3D.prototype.prepare = function () {
+        this.offline_ctx.clearRect(0, 0, this.offline_canvas.width, this.offline_canvas.height);
+        for (var i = 0; i < this.imageData.data.length; i++) {
+            this.imageData.data[i] = 0xff;
+        }
+    };
+    Screen3D.prototype.commit = function () {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.putImageData(this.imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
+    };
+    Screen3D.prototype.clear = function () {
     };
     Screen3D.prototype.round = function (n) {
         if (n - Math.floor(n) > 0.5)
@@ -193,7 +211,16 @@ var Screen3D = (function () {
             n = Math.floor(n);
         return n;
     };
-    Screen3D.prototype.rasterizeHalf = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm, mode, texture) {
+    return Screen3D;
+})();
+var Rasterizer = (function () {
+    function Rasterizer(mode, imageData) {
+        this.mode = RenderMode.Texture;
+        this.mode = mode;
+        this.imageData = imageData;
+    }
+    Rasterizer.prototype.rasterizeBetweenLineSeg = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm) {
+        var r, g, b, a;
         for (var y = startY; y < endY; y++) {
             var t1 = (y - leftTop.y) / (leftBtm.y - leftTop.y);
             var t2 = (y - rightTop.y) / (rightBtm.y - rightTop.y);
@@ -208,11 +235,11 @@ var Screen3D = (function () {
             var ex = rightTop.x + t2 * (rightBtm.x - rightTop.x);
             var csByZs;
             var ceByZe;
-            if (mode == RenderMode.Color) {
+            if (this.mode == RenderMode.Color) {
                 csByZs = leftTop.color.multi((1 - t1) / leftTop.w).add(leftBtm.color.multi(t1 / leftBtm.w));
                 ceByZe = rightTop.color.multi((1 - t2) / rightTop.w).add(rightBtm.color.multi(t2 / rightBtm.w));
             }
-            else if (mode == RenderMode.Texture) {
+            else if (this.mode == RenderMode.Texture) {
                 csByZs = leftTop.uv.multi((1 - t1) / leftTop.w).add(leftBtm.uv.multi(t1 / leftBtm.w));
                 ceByZe = rightTop.uv.multi((1 - t2) / rightTop.w).add(rightBtm.uv.multi(t2 / rightBtm.w));
             }
@@ -231,14 +258,25 @@ var Screen3D = (function () {
                 /**
                  * rgb里必须是整数
                  */
-                if (mode == RenderMode.Color) {
-                    this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
+                if (this.mode == RenderMode.Color) {
+                    r = Math.min(255, Math.ceil(cm.x));
+                    g = Math.min(255, Math.ceil(cm.y));
+                    b = Math.min(255, Math.ceil(cm.z));
+                    a = Math.min(255, Math.ceil(cm.w));
                 }
                 else {
-                    var color = texture.pick(cm.x, cm.y);
-                    this.ctx.fillStyle = "rgb(" + color.x + ", " + color.y + ", " + color.z + ")";
+                    var color = this.texture.pick(cm.x, cm.y);
+                    r = color.x;
+                    g = color.y;
+                    b = color.z;
+                    a = color.w;
                 }
-                this.ctx.fillRect(x, y, 1, 1);
+                // y is row
+                var offset = 4 * (y * this.imageData.width + x);
+                this.imageData.data[offset + 0] = r;
+                this.imageData.data[offset + 1] = g;
+                this.imageData.data[offset + 2] = b;
+                this.imageData.data[offset + 3] = a;
             }
         }
     };
@@ -248,12 +286,11 @@ var Screen3D = (function () {
     * - color same as original
     * Draw the triangle
     */
-    Screen3D.prototype.rasterize = function (p1, p2, p3, mode, texture) {
-        if (texture === void 0) { texture = null; }
-        this.ctx.fillStyle = "rgb(255,255,255)";
-        this.ctx.fillRect(p1.x, p1.y, 2, 2);
-        this.ctx.fillRect(p2.x, p2.y, 2, 2);
-        this.ctx.fillRect(p3.x, p3.y, 2, 2);
+    Rasterizer.prototype.rasterize = function (p1, p2, p3) {
+        // this.ctx.fillStyle = "rgb(255,255,255)";
+        // this.ctx.fillRect(p1.x, p1.y, 2, 2);
+        // this.ctx.fillRect(p2.x, p2.y, 2, 2);
+        // this.ctx.fillRect(p3.x, p3.y, 2, 2);
         var vertexArray = [p1, p2, p3];
         vertexArray.sort(function (a, b) { return a.position.y - b.position.y; });
         var pa = vertexArray[0];
@@ -270,61 +307,110 @@ var Screen3D = (function () {
         var roundBy = Math.round(pb.y);
         var roundCy = Math.round(pc.y);
         if (gradientAC < gradientAB) {
-            this.rasterizeHalf(roundAy, roundBy, pa, pc, pa, pb, mode, texture);
+            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pc, pa, pb);
         }
         else {
-            this.rasterizeHalf(roundAy, roundBy, pa, pb, pa, pc, mode, texture);
+            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pb, pa, pc);
         }
         if (gradientBC < gradientAC) {
-            this.rasterizeHalf(roundBy, roundCy, pa, pc, pb, pc, mode, texture);
+            this.rasterizeBetweenLineSeg(roundBy, roundCy, pa, pc, pb, pc);
         }
         else {
-            this.rasterizeHalf(roundBy, roundCy, pb, pc, pa, pc, mode, texture);
+            this.rasterizeBetweenLineSeg(roundBy, roundCy, pb, pc, pa, pc);
         }
     };
-    return Screen3D;
+    return Rasterizer;
 })();
 var Object3D = (function () {
-    function Object3D(geometry, texture) {
-        this.geometry = geometry;
-        this.matrix = new Matrix44();
-        this.texture = texture;
+    function Object3D() {
+        this.surfaceList = new Array();
+        this.matrix = new Matrix44;
     }
     return Object3D;
 })();
-var CubeGeometry = (function () {
-    function CubeGeometry() {
+var Surface3D = (function () {
+    function Surface3D() {
         this.vertexArray = new Array();
         this.indexArray = new Array();
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, 1), new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, 1), new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, 1), new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, 1), new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, -1), new Vector4(255, 0, 0), new Vector4(1, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, -1), new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, -1), new Vector4(0, 255, 0), new Vector4(1, 1, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, -1), new Vector4(0, 255, 0), new Vector4(0, 1, 0)));
-        // 前
-        this.indexArray.push(0, 2, 3);
-        this.indexArray.push(0, 3, 1);
-        // 右
-        this.indexArray.push(1, 3, 7);
-        this.indexArray.push(1, 7, 5);
-        // 后
-        this.indexArray.push(5, 7, 6);
-        this.indexArray.push(5, 6, 4);
-        // 左
-        this.indexArray.push(4, 6, 2);
-        this.indexArray.push(4, 2, 0);
-        // 上
-        this.indexArray.push(4, 0, 1);
-        this.indexArray.push(4, 1, 5);
-        // 下
-        this.indexArray.push(3, 2, 6);
-        this.indexArray.push(3, 6, 7);
     }
-    return CubeGeometry;
+    return Surface3D;
 })();
+var Cube3D = (function (_super) {
+    __extends(Cube3D, _super);
+    function Cube3D() {
+        _super.call(this);
+        var v0 = new Vector4(-1, 1, 1);
+        var v1 = new Vector4(1, 1, 1);
+        var v2 = new Vector4(-1, -1, 1);
+        var v3 = new Vector4(1, -1, 1);
+        var v4 = new Vector4(-1, 1, -1);
+        var v5 = new Vector4(1, 1, -1);
+        var v6 = new Vector4(-1, -1, -1);
+        var v7 = new Vector4(1, -1, -1);
+        var surface;
+        // Front
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+        // Back
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+        // Right
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+        // LEft
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+        // top
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+        // bottom
+        surface = new Surface3D();
+        surface.texture = new Texture3D(256, 256);
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.indexArray.push(0, 2, 3);
+        surface.indexArray.push(0, 3, 1);
+        this.surfaceList.push(surface);
+    }
+    return Cube3D;
+})(Object3D);
 /*
  * Y is up
  */
@@ -369,11 +455,13 @@ var Texture3D = (function () {
                         this.rawData[offset + 0] = 0x3f;
                         this.rawData[offset + 1] = 0xbc;
                         this.rawData[offset + 2] = 0xef;
+                        this.rawData[offset + 3] = 0xff;
                     }
                     else {
-                        this.rawData[offset + 0] = 0xff;
-                        this.rawData[offset + 1] = 0xff;
-                        this.rawData[offset + 2] = 0xff;
+                        this.rawData[offset + 0] = 0xee;
+                        this.rawData[offset + 1] = 0xee;
+                        this.rawData[offset + 2] = 0xee;
+                        this.rawData[offset + 3] = 0xff;
                     }
                 }
             }
@@ -381,10 +469,18 @@ var Texture3D = (function () {
     }
     Texture3D.prototype.pick = function (u, v) {
         if (this.loaded) {
-            var row = Math.round(u * this.width);
-            var col = Math.round(v * this.height);
+            var row = Math.round(u * (this.width));
+            var col = Math.round(v * (this.height));
+            if (row < 0)
+                row = 0;
+            if (row >= this.width)
+                row = this.width - 1;
+            if (col < 0)
+                col = 0;
+            if (col >= this.height)
+                col = this.height - 1;
             var offset = 4 * (row * this.width + col);
-            return new Vector4(this.rawData[offset + 0], this.rawData[offset + 1], this.rawData[offset + 2]);
+            return new Vector4(this.rawData[offset + 0], this.rawData[offset + 1], this.rawData[offset + 2], this.rawData[offset + 3]);
         }
         else {
             return new Vector4(255, 0, 0);
@@ -417,34 +513,43 @@ var Scene3D = (function () {
     Scene3D.prototype.render = function (mode) {
         var _this = this;
         this.screen.clear();
+        this.screen.prepare();
         for (var o = 0; o < this.objectArray.length; o++) {
             var obj = this.objectArray[o];
-            var triangleNum = obj.geometry.indexArray.length / 3;
-            for (var i = 0; i < triangleNum; i++) {
-                var i0 = obj.geometry.indexArray[i * 3 + 0];
-                var i1 = obj.geometry.indexArray[i * 3 + 1];
-                var i2 = obj.geometry.indexArray[i * 3 + 2];
-                var pm0 = obj.geometry.vertexArray[i0];
-                var pm1 = obj.geometry.vertexArray[i1];
-                var pm2 = obj.geometry.vertexArray[i2];
-                var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
-                var pc0 = pv0.transform(this.camera.view2Clipping);
-                var ps0 = pc0.clip().transform(this.screen.ndc2screen);
-                var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
-                var pc1 = pv1.transform(this.camera.view2Clipping);
-                var ps1 = pc1.clip().transform(this.screen.ndc2screen);
-                var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
-                var pc2 = pv2.transform(this.camera.view2Clipping);
-                var ps2 = pc2.clip().transform(this.screen.ndc2screen);
-                ps0.w = pv0.z;
-                ps1.w = pv1.z;
-                ps2.w = pv2.z;
-                var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
-                if (pv0.dot(normal) < 0) {
-                    this.screen.rasterize(new Vertex3D(ps0, pm0.color, pm0.uv), new Vertex3D(ps1, pm1.color, pm1.uv), new Vertex3D(ps2, pm2.color, pm2.uv), mode, obj.texture);
+            for (var s = 0; s < obj.surfaceList.length; s++) {
+                var surface = obj.surfaceList[s];
+                this.screen.rasterizer.texture = surface.texture;
+                this.screen.rasterizer.imageData = this.screen.imageData;
+                var vertexArray = surface.vertexArray;
+                var indexArray = surface.indexArray;
+                var triangleNum = indexArray.length / 3;
+                for (var i = 0; i < triangleNum; i++) {
+                    var i0 = indexArray[i * 3 + 0];
+                    var i1 = indexArray[i * 3 + 1];
+                    var i2 = indexArray[i * 3 + 2];
+                    var pm0 = vertexArray[i0];
+                    var pm1 = vertexArray[i1];
+                    var pm2 = vertexArray[i2];
+                    var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
+                    var pc0 = pv0.transform(this.camera.view2Clipping);
+                    var ps0 = pc0.clip().transform(this.screen.ndc2screen);
+                    var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
+                    var pc1 = pv1.transform(this.camera.view2Clipping);
+                    var ps1 = pc1.clip().transform(this.screen.ndc2screen);
+                    var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
+                    var pc2 = pv2.transform(this.camera.view2Clipping);
+                    var ps2 = pc2.clip().transform(this.screen.ndc2screen);
+                    ps0.w = pc0.w;
+                    ps1.w = pc1.w;
+                    ps2.w = pc2.w;
+                    var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
+                    if (pv0.dot(normal) < 0) {
+                        this.screen.rasterizer.rasterize(new Vertex3D(ps0, pm0.color, pm0.uv), new Vertex3D(ps1, pm1.color, pm1.uv), new Vertex3D(ps2, pm2.color, pm2.uv));
+                    }
                 }
             }
         }
+        this.screen.commit();
         requestAnimationFrame(function () { return _this.render(mode); });
     };
     Scene3D.prototype.start = function (mode) {
