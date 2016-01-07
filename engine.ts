@@ -267,7 +267,7 @@ class Screen3D {
                 if (t3 < 0) t3 = 0;
 
                 var recipZm = (1 - t3) * recipZs + t3 * recipZe;
-                var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
+                var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
                 var cm = cmByzm.multi(1 / recipZm);
                     
                 /**
@@ -530,9 +530,9 @@ class Scene3D {
                 var ps2 = pc2.clip().transform(this.screen.ndc2screen);
 
 
-                ps0.w = pv0.w;
-                ps1.w = pv1.w;
-                ps2.w = pv2.w;
+                ps0.w = pv0.z;
+                ps1.w = pv1.z;
+                ps2.w = pv2.z;
 
                 var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                 if (pv0.dot(normal) < 0) {
