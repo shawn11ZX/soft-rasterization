@@ -22,7 +22,7 @@ function testRasterize() {
     );
 
     var screen = new Screen3D(1024, 768);
-    screen.rasterize(v1, v2, v3);
+    screen.rasterize(v1, v2, v3, RenderMode.Color);
 
     var transRight = new Vector4(400, 0, 0);
 
@@ -41,7 +41,7 @@ function testRasterize() {
         new Vector4(0, 0, 255)
     );
     
-    screen.rasterize(v1, v2, v3);
+    screen.rasterize(v1, v2, v3, RenderMode.Color);
 }
 
 function testScreen3d() {
@@ -67,7 +67,7 @@ function testScreen3d() {
         new Vector4(0, 0, 255)
     );
     
-    screen.rasterize(v1, v2, v3);
+    screen.rasterize(v1, v2, v3, RenderMode.Color);
 }
 
 
@@ -97,7 +97,7 @@ function testPerspective() {
 
 
 
-    screen.rasterize(v1, v2, v3);
+    screen.rasterize(v1, v2, v3, RenderMode.Color);
 }
 
 function testLookAt() {
@@ -128,7 +128,7 @@ function testLookAt() {
 
 
 
-    screen.rasterize(v1, v2, v3);
+    screen.rasterize(v1, v2, v3, RenderMode.Color);
 }
 
 function testPerspective2()
@@ -208,7 +208,8 @@ function main() {
     camera.lookAt(new Vector4(0, 0, 50), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0));
     
     var scene = new Scene3D();
-    var obj = new Object3D(new CubeGeometry());
+    var texture = new Texture3D(256, 256);
+    var obj = new Object3D(new CubeGeometry(), texture);
     obj.matrix.scale(20, 10, 10);
     scene.addObject(obj);
     scene.setCamera(camera);
@@ -216,7 +217,7 @@ function main() {
     
     
     
-    scene.start();
+    scene.start(RenderMode.Texture);
 }
 
 //testRasterize();

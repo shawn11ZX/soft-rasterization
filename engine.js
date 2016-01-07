@@ -92,11 +92,13 @@ var Matrix44 = (function () {
     return Matrix44;
 })();
 var Vertex3D = (function () {
-    function Vertex3D(position, color) {
+    function Vertex3D(position, color, uv) {
         if (position === void 0) { position = new Vector4(); }
         if (color === void 0) { color = new Vector4(); }
+        if (uv === void 0) { uv = new Vector4(); }
         this.position = position;
         this.color = color;
+        this.uv = uv;
     }
     Object.defineProperty(Vertex3D.prototype, "x", {
         get: function () { return this.position.x; },
@@ -158,6 +160,12 @@ var Camera3D = (function () {
     };
     return Camera3D;
 })();
+var RenderMode;
+(function (RenderMode) {
+    RenderMode[RenderMode["Color"] = 0] = "Color";
+    RenderMode[RenderMode["Texture"] = 1] = "Texture";
+    RenderMode[RenderMode["Wireframe"] = 2] = "Wireframe";
+})(RenderMode || (RenderMode = {}));
 var Screen3D = (function () {
     function Screen3D(width, height) {
         this.ndc2screen = new Matrix44();
@@ -185,13 +193,63 @@ var Screen3D = (function () {
             n = Math.floor(n);
         return n;
     };
+    Screen3D.prototype.rasterizeHalf = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm, mode, texture) {
+        for (var y = startY; y < endY; y++) {
+            var t1 = (y - leftTop.y) / (leftBtm.y - leftTop.y);
+            var t2 = (y - rightTop.y) / (rightBtm.y - rightTop.y);
+            if (t1 < 0)
+                t1 = 0;
+            if (t2 < 0)
+                t2 = 0;
+            /**
+             * 不取整会导致波纹效果
+             */
+            var sx = leftTop.x + t1 * (leftBtm.x - leftTop.x);
+            var ex = rightTop.x + t2 * (rightBtm.x - rightTop.x);
+            var csByZs;
+            var ceByZe;
+            if (mode == RenderMode.Color) {
+                csByZs = leftTop.color.multi((1 - t1) / leftTop.w).add(leftBtm.color.multi(t1 / leftBtm.w));
+                ceByZe = rightTop.color.multi((1 - t2) / rightTop.w).add(rightBtm.color.multi(t2 / rightBtm.w));
+            }
+            else if (mode == RenderMode.Texture) {
+                csByZs = leftTop.uv.multi((1 - t1) / leftTop.w).add(leftBtm.uv.multi(t1 / leftBtm.w));
+                ceByZe = rightTop.uv.multi((1 - t2) / rightTop.w).add(rightBtm.uv.multi(t2 / rightBtm.w));
+            }
+            var recipZs = (1 - t1) / leftTop.w + t1 / leftBtm.w;
+            var recipZe = (1 - t2) / rightTop.w + t2 / rightBtm.w;
+            var roundsx = Math.round(sx);
+            var roundex = Math.round(ex);
+            var diffX = ex - sx;
+            for (var x = roundsx; x < roundex; x++) {
+                var t3 = (x - sx) / diffX;
+                if (t3 < 0)
+                    t3 = 0;
+                var recipZm = (1 - t3) * recipZs + t3 * recipZe;
+                var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
+                var cm = cmByzm.multi(1 / recipZm);
+                /**
+                 * rgb里必须是整数
+                 */
+                if (mode == RenderMode.Color) {
+                    this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
+                }
+                else {
+                    var color = texture.pick(cm.x, cm.y);
+                    this.ctx.fillStyle = "rgb(" + color.x + ", " + color.y + ", " + color.z + ")";
+                }
+                this.ctx.fillRect(x, y, 1, 1);
+            }
+        }
+    };
     /**
      * Given three points with:
     * - position in screen space
     * - color same as original
     * Draw the triangle
     */
-    Screen3D.prototype.rasterize = function (p1, p2, p3) {
+    Screen3D.prototype.rasterize = function (p1, p2, p3, mode, texture) {
+        if (texture === void 0) { texture = null; }
         this.ctx.fillStyle = "rgb(255,255,255)";
         this.ctx.fillRect(p1.x, p1.y, 2, 2);
         this.ctx.fillRect(p2.x, p2.y, 2, 2);
@@ -211,85 +269,26 @@ var Screen3D = (function () {
         var roundAy = Math.round(pa.y);
         var roundBy = Math.round(pb.y);
         var roundCy = Math.round(pc.y);
-        for (var y = roundAy; y < roundBy; y++) {
-            var t1 = (y - pa.y) / (pb.y - pa.y);
-            var t2 = (y - pa.y) / (pc.y - pa.y);
-            if (t1 < 0)
-                t1 = 0;
-            if (t2 < 0)
-                t2 = 0;
-            /**
-             * 不取整会导致波纹效果
-             */
-            var sx = pa.x + t1 * (pb.x - pa.x);
-            var ex = pa.x + t2 * (pc.x - pa.x);
-            var csByZs = pa.color.multi((1 - t1) / pa.w).add(pb.color.multi(t1 / pb.w));
-            var ceByZe = pa.color.multi((1 - t2) / pa.w).add(pc.color.multi(t2 / pc.w));
-            var recipZs = (1 - t1) / pa.w + t1 / pb.w;
-            var recipZe = (1 - t2) / pa.w + t2 / pc.w;
-            if (gradientAC < gradientAB) {
-                sx = [ex, ex = sx][0];
-                csByZs = [ceByZe, ceByZe = csByZs][0];
-                recipZs = [recipZe, recipZe = recipZs][0];
-            }
-            var roundsx = Math.round(sx);
-            var roundex = Math.round(ex);
-            var diffX = ex - sx;
-            for (var x = roundsx; x < roundex; x++) {
-                var t3 = (x - sx) / diffX;
-                var recipZm = (1 - t3) * recipZs + t3 * recipZe;
-                var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
-                var cm = cmByzm.multi(1 / recipZm);
-                /**
-                 * rgb里必须是整数
-                 */
-                this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-                this.ctx.fillRect(x, y, 1, 1);
-            }
+        if (gradientAC < gradientAB) {
+            this.rasterizeHalf(roundAy, roundBy, pa, pc, pa, pb, mode, texture);
         }
-        for (var y = roundBy; y < roundCy; y++) {
-            var t1 = (y - pb.y) / (pc.y - pb.y);
-            var t2 = (y - pa.y) / (pc.y - pa.y);
-            if (t1 < 0)
-                t1 = 0;
-            if (t2 < 0)
-                t2 = 0;
-            var sx = pb.x + t1 * (pc.x - pb.x);
-            var ex = pa.x + t2 * (pc.x - pa.x);
-            var csByZs = pc.color.multi((t1) / pc.w).add(pb.color.multi((1 - t1) / pb.w));
-            var ceByZe = pc.color.multi((t2) / pc.w).add(pa.color.multi((1 - t2) / pa.w));
-            var recipZs = (t1) / pc.w + (1 - t1) / pb.w;
-            var recipZe = (t2) / pc.w + (1 - t2) / pa.w;
-            /**
-             * 三角形的下半部分，左边的边gradient更大
-             */
-            if (gradientBC < gradientAC) {
-                sx = [ex, ex = sx][0];
-                csByZs = [ceByZe, ceByZe = csByZs][0];
-                recipZs = [recipZe, recipZe = recipZs][0];
-            }
-            var roundsx = Math.round(sx);
-            var roundex = Math.round(ex);
-            var diffX = ex - sx;
-            for (var x = roundsx; x < roundex; x++) {
-                var t3 = (x - sx) / diffX;
-                var recipZm = (1 - t3) * recipZs + t3 * recipZe;
-                var cmByzm = csByZs.multi((1 - t3) * recipZs).add(ceByZe.multi(t3 * recipZe));
-                var cm = cmByzm.multi(1 / recipZm);
-                /**
-                 * rgb里必须是整数
-                 */
-                this.ctx.fillStyle = "rgb(" + Math.min(255, Math.ceil(cm.x)) + ", " + Math.min(255, Math.ceil(cm.y)) + ", " + Math.min(255, Math.ceil(cm.z)) + ")";
-                this.ctx.fillRect(x, y, 1, 1);
-            }
+        else {
+            this.rasterizeHalf(roundAy, roundBy, pa, pb, pa, pc, mode, texture);
+        }
+        if (gradientBC < gradientAC) {
+            this.rasterizeHalf(roundBy, roundCy, pa, pc, pb, pc, mode, texture);
+        }
+        else {
+            this.rasterizeHalf(roundBy, roundCy, pb, pc, pa, pc, mode, texture);
         }
     };
     return Screen3D;
 })();
 var Object3D = (function () {
-    function Object3D(geometry) {
+    function Object3D(geometry, texture) {
         this.geometry = geometry;
         this.matrix = new Matrix44();
+        this.texture = texture;
     }
     return Object3D;
 })();
@@ -297,14 +296,14 @@ var CubeGeometry = (function () {
     function CubeGeometry() {
         this.vertexArray = new Array();
         this.indexArray = new Array();
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, 1), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, 1), new Vector4(0, 255, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, 1), new Vector4(0, 0, 255)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, 1), new Vector4(255, 255, 255)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, -1), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, -1), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, -1), new Vector4(255, 0, 0)));
-        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, -1), new Vector4(255, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, 1), new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, 1), new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, 1), new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, 1), new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, 1, -1), new Vector4(255, 0, 0), new Vector4(1, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, 1, -1), new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(-1, -1, -1), new Vector4(0, 255, 0), new Vector4(1, 1, 0)));
+        this.vertexArray.push(new Vertex3D(new Vector4(1, -1, -1), new Vector4(0, 255, 0), new Vector4(0, 1, 0)));
         // 前
         this.indexArray.push(0, 2, 3);
         this.indexArray.push(0, 3, 1);
@@ -347,6 +346,61 @@ var SphericalCoodinate = (function () {
     };
     return SphericalCoodinate;
 })();
+var Texture3D = (function () {
+    function Texture3D(width, height, src) {
+        var _this = this;
+        if (src === void 0) { src = null; }
+        this.height = height;
+        this.width = width;
+        this.img = new Image(width, height);
+        if (src != null) {
+            this.img.onload = function (ev) { return _this.onLoadImage(ev); };
+            this.img.src = src;
+        }
+        else {
+            this.loaded = true;
+            this.rawData = new Array();
+            for (var j = 0; j < width; j++) {
+                for (var i = 0; i < height; i++) {
+                    var x = i / 32;
+                    var y = j / 32;
+                    var offset = 4 * (j * this.width + i);
+                    if (((x + y) & 1) == 1) {
+                        this.rawData[offset + 0] = 0x3f;
+                        this.rawData[offset + 1] = 0xbc;
+                        this.rawData[offset + 2] = 0xef;
+                    }
+                    else {
+                        this.rawData[offset + 0] = 0xff;
+                        this.rawData[offset + 1] = 0xff;
+                        this.rawData[offset + 2] = 0xff;
+                    }
+                }
+            }
+        }
+    }
+    Texture3D.prototype.pick = function (u, v) {
+        if (this.loaded) {
+            var row = Math.round(u * this.width);
+            var col = Math.round(v * this.height);
+            var offset = 4 * (row * this.width + col);
+            return new Vector4(this.rawData[offset + 0], this.rawData[offset + 1], this.rawData[offset + 2]);
+        }
+        else {
+            return new Vector4(255, 0, 0);
+        }
+    };
+    Texture3D.prototype.onLoadImage = function (ev) {
+        var tmp_canvas = document.createElement("canvas");
+        tmp_canvas.width = this.width;
+        tmp_canvas.height = this.height;
+        var tmp_context = tmp_canvas.getContext('2d');
+        tmp_context.drawImage(this.img, 0, 0);
+        this.rawData = tmp_context.getImageData(0, 0, tmp_canvas.width, tmp_canvas.height).data;
+        this.loaded = true;
+    };
+    return Texture3D;
+})();
 var Scene3D = (function () {
     function Scene3D() {
         this.objectArray = new Array();
@@ -360,7 +414,7 @@ var Scene3D = (function () {
     Scene3D.prototype.addObject = function (obj) {
         this.objectArray.push(obj);
     };
-    Scene3D.prototype.render = function () {
+    Scene3D.prototype.render = function (mode) {
         var _this = this;
         this.screen.clear();
         for (var o = 0; o < this.objectArray.length; o++) {
@@ -387,15 +441,15 @@ var Scene3D = (function () {
                 ps2.w = pv2.w;
                 var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                 if (pv0.dot(normal) < 0) {
-                    this.screen.rasterize(new Vertex3D(ps0, pm0.color), new Vertex3D(ps1, pm1.color), new Vertex3D(ps2, pm2.color));
+                    this.screen.rasterize(new Vertex3D(ps0, pm0.color, pm0.uv), new Vertex3D(ps1, pm1.color, pm1.uv), new Vertex3D(ps2, pm2.color, pm2.uv), mode, obj.texture);
                 }
             }
         }
-        requestAnimationFrame(function () { return _this.render(); });
+        requestAnimationFrame(function () { return _this.render(mode); });
     };
-    Scene3D.prototype.start = function () {
+    Scene3D.prototype.start = function (mode) {
         var _this = this;
-        requestAnimationFrame(function () { return _this.render(); });
+        requestAnimationFrame(function () { return _this.render(mode); });
         window.addEventListener("keypress", function (e) { return _this.onKeyDown(e); }, false);
     };
     Scene3D.prototype.onKeyDown = function (e) {
