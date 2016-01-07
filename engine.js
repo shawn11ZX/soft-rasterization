@@ -360,9 +360,10 @@ var Cube3D = (function (_super) {
         var v6 = new Vector4(-1, -1, -1);
         var v7 = new Vector4(1, -1, -1);
         var surface;
+        var texture = new Texture3D(256, 256, "texture.png");
         // Front
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -372,7 +373,7 @@ var Cube3D = (function (_super) {
         this.surfaceList.push(surface);
         // Back
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -382,7 +383,7 @@ var Cube3D = (function (_super) {
         this.surfaceList.push(surface);
         // Right
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -392,7 +393,7 @@ var Cube3D = (function (_super) {
         this.surfaceList.push(surface);
         // LEft
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -402,7 +403,7 @@ var Cube3D = (function (_super) {
         this.surfaceList.push(surface);
         // top
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -412,7 +413,7 @@ var Cube3D = (function (_super) {
         this.surfaceList.push(surface);
         // bottom
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -452,33 +453,38 @@ var Texture3D = (function () {
         this.width = width;
         this.img = new Image(width, height);
         if (src != null) {
+            //this.img = <HTMLImageElement>document.getElementById(src);
+            //this.onLoadImage(null);
             this.img.onload = function (ev) { return _this.onLoadImage(ev); };
             this.img.src = src;
         }
         else {
-            this.loaded = true;
-            this.rawData = new Array();
-            for (var j = 0; j < width; j++) {
-                for (var i = 0; i < height; i++) {
-                    var x = i / 32;
-                    var y = j / 32;
-                    var offset = 4 * (j * this.width + i);
-                    if (((x + y) & 1) == 1) {
-                        this.rawData[offset + 0] = 0x3f;
-                        this.rawData[offset + 1] = 0xbc;
-                        this.rawData[offset + 2] = 0xef;
-                        this.rawData[offset + 3] = 0xff;
-                    }
-                    else {
-                        this.rawData[offset + 0] = 0xee;
-                        this.rawData[offset + 1] = 0xee;
-                        this.rawData[offset + 2] = 0xee;
-                        this.rawData[offset + 3] = 0xff;
-                    }
+            this.initDefaultTexture(width, height);
+        }
+    }
+    Texture3D.prototype.initDefaultTexture = function (width, height) {
+        this.loaded = true;
+        this.rawData = new Array();
+        for (var j = 0; j < width; j++) {
+            for (var i = 0; i < height; i++) {
+                var x = i / 32;
+                var y = j / 32;
+                var offset = 4 * (j * this.width + i);
+                if (((x + y) & 1) == 1) {
+                    this.rawData[offset + 0] = 0x3f;
+                    this.rawData[offset + 1] = 0xbc;
+                    this.rawData[offset + 2] = 0xef;
+                    this.rawData[offset + 3] = 0xff;
+                }
+                else {
+                    this.rawData[offset + 0] = 0xee;
+                    this.rawData[offset + 1] = 0xee;
+                    this.rawData[offset + 2] = 0xee;
+                    this.rawData[offset + 3] = 0xff;
                 }
             }
         }
-    }
+    };
     Texture3D.prototype.pick = function (u, v) {
         if (this.loaded) {
             var row = Math.round(u * (this.width));
@@ -499,13 +505,18 @@ var Texture3D = (function () {
         }
     };
     Texture3D.prototype.onLoadImage = function (ev) {
-        var tmp_canvas = document.createElement("canvas");
-        tmp_canvas.width = this.width;
-        tmp_canvas.height = this.height;
-        var tmp_context = tmp_canvas.getContext('2d');
-        tmp_context.drawImage(this.img, 0, 0);
-        this.rawData = tmp_context.getImageData(0, 0, tmp_canvas.width, tmp_canvas.height).data;
-        this.loaded = true;
+        try {
+            var tmp_canvas = document.createElement("canvas");
+            tmp_canvas.width = this.width;
+            tmp_canvas.height = this.height;
+            var tmp_context = tmp_canvas.getContext('2d');
+            tmp_context.drawImage(this.img, 0, 0);
+            this.rawData = tmp_context.getImageData(0, 0, tmp_canvas.width, tmp_canvas.height).data;
+            this.loaded = true;
+        }
+        catch (Error) {
+            this.initDefaultTexture(this.width, this.height);
+        }
     };
     return Texture3D;
 })();

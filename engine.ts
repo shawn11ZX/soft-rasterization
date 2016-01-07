@@ -39,7 +39,7 @@ class Vector4 {
     }
     public normalize(): Vector4 {
         var len = this.length();
-        return new Vector4(this.x / len, this.y / len, this.z / len, this.w/len);
+        return new Vector4(this.x / len, this.y / len, this.z / len, this.w / len);
     }
     public clip(): Vector4 {
         return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
@@ -442,10 +442,10 @@ class Cube3D extends Object3D {
         var v7 = new Vector4(1, -1, -1);
 
         var surface: Surface3D;
-        
+        var texture = new Texture3D(256, 256, "texture.png");
         // Front
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -458,7 +458,7 @@ class Cube3D extends Object3D {
         
         // Back
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -470,7 +470,7 @@ class Cube3D extends Object3D {
         
         // Right
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -482,7 +482,7 @@ class Cube3D extends Object3D {
 
         // LEft
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -494,7 +494,7 @@ class Cube3D extends Object3D {
         
         // top
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -506,7 +506,7 @@ class Cube3D extends Object3D {
         
         // bottom
         surface = new Surface3D();
-        surface.texture = new Texture3D(256, 256);
+        surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
@@ -557,35 +557,39 @@ class Texture3D {
         this.img = new Image(width, height);
 
         if (src != null) {
+            //this.img = <HTMLImageElement>document.getElementById(src);
+            //this.onLoadImage(null);
             this.img.onload = (ev) => this.onLoadImage(ev);
             this.img.src = src;
         }
         else {
-            this.loaded = true;
-            this.rawData = new Array();
-            for (var j = 0; j < width; j++) {
-                for (var i = 0; i < height; i++) {
-                    var x = i / 32;
-                    var y = j / 32;
-                    var offset = 4 * (j * this.width + i)
-                    if (((x + y) & 1) == 1) {
-                        this.rawData[offset + 0] = 0x3f;
-                        this.rawData[offset + 1] = 0xbc;
-                        this.rawData[offset + 2] = 0xef;
-                        this.rawData[offset + 3] = 0xff;
-                    }
-                    else {
-                        this.rawData[offset + 0] = 0xee;
-                        this.rawData[offset + 1] = 0xee;
-                        this.rawData[offset + 2] = 0xee;
-                        this.rawData[offset + 3] = 0xff;
-                    }
-
+            this.initDefaultTexture(width, height);
+        }
+    }
+    initDefaultTexture(width: number, height: number) {
+        this.loaded = true;
+        this.rawData = new Array();
+        for (var j = 0; j < width; j++) {
+            for (var i = 0; i < height; i++) {
+                var x = i / 32;
+                var y = j / 32;
+                var offset = 4 * (j * this.width + i)
+                if (((x + y) & 1) == 1) {
+                    this.rawData[offset + 0] = 0x3f;
+                    this.rawData[offset + 1] = 0xbc;
+                    this.rawData[offset + 2] = 0xef;
+                    this.rawData[offset + 3] = 0xff;
                 }
+                else {
+                    this.rawData[offset + 0] = 0xee;
+                    this.rawData[offset + 1] = 0xee;
+                    this.rawData[offset + 2] = 0xee;
+                    this.rawData[offset + 3] = 0xff;
+                }
+
             }
         }
     }
-
     public pick(u: number, v: number): Vector4 {
         if (this.loaded) {
             var row = Math.round(u * (this.width));
@@ -606,36 +610,38 @@ class Texture3D {
         }
     }
     private onLoadImage(ev) {
-        var tmp_canvas = document.createElement("canvas");
-        tmp_canvas.width = this.width;
-        tmp_canvas.height = this.height;
+        try {
+            var tmp_canvas = document.createElement("canvas");
+            tmp_canvas.width = this.width;
+            tmp_canvas.height = this.height;
 
-        var tmp_context = tmp_canvas.getContext('2d');
-        tmp_context.drawImage(this.img, 0, 0);
+            var tmp_context = tmp_canvas.getContext('2d');
+            tmp_context.drawImage(this.img, 0, 0);
 
-        this.rawData = tmp_context.getImageData(0, 0, tmp_canvas.width, tmp_canvas.height).data;
-        this.loaded = true;
+            this.rawData = tmp_context.getImageData(0, 0, tmp_canvas.width, tmp_canvas.height).data;
+            this.loaded = true;
+        } catch (Error) {
+            this.initDefaultTexture(this.width, this.height);
+        }
     }
 }
 
 class Clipping {
-    
-    
-    static clip(pc0:Vertex3D, pc1:Vertex3D, pc2:Vertex3D):Vertex3D[]
-    {
-        var inputVertexList:Vertex3D[] = new Array();
-        var outputVertexList:Vertex3D[]  = new Array();
+
+
+    static clip(pc0: Vertex3D, pc1: Vertex3D, pc2: Vertex3D): Vertex3D[] {
+        var inputVertexList: Vertex3D[] = new Array();
+        var outputVertexList: Vertex3D[] = new Array();
         inputVertexList.push(pc1);
         inputVertexList.push(pc2);
         inputVertexList.push(pc0);
-        
+
         var prevPoint = pc0;
         var prevVisible = this.isVisible(pc0)
-        
-        for (var i = 0; i < inputVertexList.length; i++)
-        {
+
+        for (var i = 0; i < inputVertexList.length; i++) {
             var curPoint = inputVertexList[i];
-            var curVisible= this.isVisible(curPoint);
+            var curVisible = this.isVisible(curPoint);
             if (prevVisible && curVisible) {
                 outputVertexList.push(prevPoint);
             }
@@ -647,53 +653,52 @@ class Clipping {
             else if (!prevVisible && curVisible) {
                 var t = this.getPercent(curPoint.position, prevPoint.position)
                 outputVertexList.push(this.getIntersection(curPoint, prevPoint));
-            } 
+            }
             prevPoint = curPoint;
             prevVisible = curVisible;
         }
         return outputVertexList;
     }
-    
-    static getIntersection(pInside:Vertex3D, pOutside:Vertex3D) {
-        var t = this.getPercent(pInside.position, pOutside.position);   
-        var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1-t));
-        var newColor = pInside.color.multi(t).add(pOutside.color.multi(1-t));
-        var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1-t));
-        return new Vertex3D(newPoint, newColor, newUv); 
+
+    static getIntersection(pInside: Vertex3D, pOutside: Vertex3D) {
+        var t = this.getPercent(pInside.position, pOutside.position);
+        var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1 - t));
+        var newColor = pInside.color.multi(t).add(pOutside.color.multi(1 - t));
+        var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1 - t));
+        return new Vertex3D(newPoint, newColor, newUv);
     }
-    
-    static getPercent(pInside:Vector4, pOutside:Vector4):number {
+
+    static getPercent(pInside: Vector4, pOutside: Vector4): number {
         var t = 0;
-        if (pOutside.x <= -1*pOutside.w) { // x+w < 0
-            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w))) 
+        if (pOutside.x <= -1 * pOutside.w) { // x+w < 0
+            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w)))
         }
-        
+
         if (pOutside.x >= pOutside.w) { // x-w > 0
-            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w))) 
+            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w)))
         }
-        
-        if (pOutside.y <= -1*pOutside.w) { // y+w < 0
-            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w))) 
+
+        if (pOutside.y <= -1 * pOutside.w) { // y+w < 0
+            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w)))
         }
-        
+
         if (pOutside.y >= pOutside.w) { // y-w > 0
-            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w))) 
+            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w)))
         }
-        
-        if (pOutside.z <= -1*pOutside.w) { // z+w < 0
-            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w))) 
+
+        if (pOutside.z <= -1 * pOutside.w) { // z+w < 0
+            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w)))
         }
-        
+
         if (pOutside.z >= pOutside.w) { // z-w > 0
-            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w))) 
+            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w)))
         }
         return t;
     }
-    
-    static isVisible(v:Vertex3D):boolean
-    {
-        return (v.x <= v.w) && (v.x >= -1* v.w) 
-        && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
+
+    static isVisible(v: Vertex3D): boolean {
+        return (v.x <= v.w) && (v.x >= -1 * v.w)
+            && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
     }
 }
 
@@ -744,22 +749,22 @@ class Scene3D {
 
                     var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                     if (pv0.dot(normal) < 0) {
-                                                
+
                         var pc0 = pv0.transform(this.camera.view2Clipping);
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
-                        
+
                         var pcList = Clipping.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
-                        
+
                         var psList = this.clipDivide(pcList);
                         if (psList.length >= 3) {
                             this.screen.rasterizer.rasterize(psList[0], psList[1], psList[2]);
                             if (psList.length >= 4)
-                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);    
+                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);
                         }
-                       
-                        
-                        
+
+
+
                     }
 
                 }
@@ -770,9 +775,9 @@ class Scene3D {
         requestAnimationFrame(() => this.render(mode));
     }
 
-    clipDivide(pcList:Vertex3D[]):Vertex3D[] {
+    clipDivide(pcList: Vertex3D[]): Vertex3D[] {
         var psList = new Array();
-         for (var j = 0; j < pcList.length; j++) {
+        for (var j = 0; j < pcList.length; j++) {
             var pc = pcList[j];
             var ps = pc.position.clip().transform(this.screen.ndc2screen);
             ps.w = pc.w;
