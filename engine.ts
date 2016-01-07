@@ -251,19 +251,23 @@ class Rasterizer {
     
     texture:Texture3D;
     imageData:ImageData;
-    
+    zbuf:number[];
     
     constructor(imageData:ImageData) {
         
         this.imageData = imageData;
+        this.zbuf = new Array(imageData.data.length/4);
     }
     
     prepare() {
         
         for (var i = 0; i < this.imageData.data.length; i++) {
-            this.imageData.data[i] = 0xff;
+            this.imageData.data[i] = 0;
         }
         
+        for (var i = 0; i < this.zbuf.length; i++) {
+            this.zbuf[i] = 0xffffffff;
+        }
     }
     
     rasterizeBetweenLineSeg(startY: number, endY: number, leftTop: Vertex3D, leftBtm: Vertex3D, rightTop: Vertex3D, rightBtm: Vertex3D) {
@@ -311,9 +315,17 @@ class Rasterizer {
                 var t3 = (x - sx) / diffX;
                 if (t3 < 0) t3 = 0;
 
-                var recipZm = (1 - t3) * recipZs + t3 * recipZe;
+                var Zm = 1 / ((1 - t3) * recipZs + t3 * recipZe);
+                
+                if (Zm < this.zbuf[y*this.imageData.width + x]) {
+                    this.zbuf[y*this.imageData.width + x] = Zm;
+                }
+                else {
+                    continue;
+                }
+                
                 var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
-                var cm = cmByzm.multi(1 / recipZm);
+                var cm = cmByzm.multi(Zm);
                 
                 /**
                  * rgb里必须是整数
