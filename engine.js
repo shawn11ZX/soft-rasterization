@@ -16,22 +16,22 @@ var Vector4 = (function () {
         this.w = w;
     }
     Vector4.prototype.add = function (right) {
-        return new Vector4(this.x + right.x, this.y + right.y, this.z + right.z);
+        return new Vector4(this.x + right.x, this.y + right.y, this.z + right.z, this.w + right.w);
     };
     Vector4.prototype.sub = function (right) {
-        return new Vector4(this.x - right.x, this.y - right.y, this.z - right.z);
+        return new Vector4(this.x - right.x, this.y - right.y, this.z - right.z, this.w - right.w);
     };
     Vector4.prototype.multi = function (right) {
-        return new Vector4(this.x * right, this.y * right, this.z * right);
+        return new Vector4(this.x * right, this.y * right, this.z * right, this.w * right);
     };
     Vector4.prototype.cross = function (right) {
-        return new Vector4(this.y * right.z - this.z * right.y, this.z * right.x - this.x * right.z, this.x * right.y - this.y * right.x);
+        return new Vector4(this.y * right.z - this.z * right.y, this.z * right.x - this.x * right.z, this.x * right.y - this.y * right.x, 0);
     };
     Vector4.prototype.length = function () {
         return Math.sqrt(this.dot(this));
     };
     Vector4.prototype.dot = function (right) {
-        return this.x * right.x + this.y * right.y + this.z * right.z;
+        return this.x * right.x + this.y * right.y + this.z * right.z + this.w * right.w;
     };
     Vector4.prototype.normalize = function () {
         var len = this.length();
@@ -83,6 +83,11 @@ var Matrix44 = (function () {
         this.set(0, 0, this.get(0, 0) * x);
         this.set(1, 1, this.get(1, 1) * y);
         this.set(2, 2, this.get(2, 2) * z);
+    };
+    Matrix44.prototype.translate = function (x, y, z) {
+        this.set(3, 0, this.get(3, 0) + x);
+        this.set(3, 1, this.get(3, 1) + y);
+        this.set(3, 2, this.get(3, 2) + z);
     };
     Matrix44.createRotateY = function (angle) {
         var m = new Matrix44();
@@ -190,19 +195,10 @@ var Screen3D = (function () {
         this.offline_canvas.height = height;
         this.offline_ctx = this.offline_canvas.getContext("2d");
         this.imageData = this.offline_ctx.createImageData(width, height);
-        this.rasterizer = new Rasterizer(RenderMode.Texture, this.imageData);
+        this.rasterizer = new Rasterizer(this.imageData);
     }
-    Screen3D.prototype.prepare = function () {
-        this.offline_ctx.clearRect(0, 0, this.offline_canvas.width, this.offline_canvas.height);
-        for (var i = 0; i < this.imageData.data.length; i++) {
-            this.imageData.data[i] = 0xff;
-        }
-    };
     Screen3D.prototype.commit = function () {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.putImageData(this.imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
-    };
-    Screen3D.prototype.clear = function () {
     };
     Screen3D.prototype.round = function (n) {
         if (n - Math.floor(n) > 0.5)
@@ -214,11 +210,14 @@ var Screen3D = (function () {
     return Screen3D;
 })();
 var Rasterizer = (function () {
-    function Rasterizer(mode, imageData) {
-        this.mode = RenderMode.Texture;
-        this.mode = mode;
+    function Rasterizer(imageData) {
         this.imageData = imageData;
     }
+    Rasterizer.prototype.prepare = function () {
+        for (var i = 0; i < this.imageData.data.length; i++) {
+            this.imageData.data[i] = 0xff;
+        }
+    };
     Rasterizer.prototype.rasterizeBetweenLineSeg = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm) {
         var r, g, b, a;
         for (var y = startY; y < endY; y++) {
@@ -324,6 +323,7 @@ var Rasterizer = (function () {
 var Object3D = (function () {
     function Object3D() {
         this.surfaceList = new Array();
+        this.renderMode = RenderMode.Texture;
         this.matrix = new Matrix44;
     }
     return Object3D;
@@ -351,60 +351,60 @@ var Cube3D = (function (_super) {
         // Front
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v0, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v3, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
         // Back
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v5, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v6, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
         // Right
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
         // LEft
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
         // top
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
         // bottom
         surface = new Surface3D();
         surface.texture = new Texture3D(256, 256);
-        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 0, 0), new Vector4(0, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0), new Vector4(1, 0, 0)));
-        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255), new Vector4(0, 1, 0)));
-        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255), new Vector4(1, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
+        surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
+        surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
@@ -512,10 +512,10 @@ var Scene3D = (function () {
     };
     Scene3D.prototype.render = function (mode) {
         var _this = this;
-        this.screen.clear();
-        this.screen.prepare();
+        this.screen.rasterizer.prepare();
         for (var o = 0; o < this.objectArray.length; o++) {
             var obj = this.objectArray[o];
+            this.screen.rasterizer.mode = obj.renderMode;
             for (var s = 0; s < obj.surfaceList.length; s++) {
                 var surface = obj.surfaceList[s];
                 this.screen.rasterizer.texture = surface.texture;
