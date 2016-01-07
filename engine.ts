@@ -39,7 +39,7 @@ class Vector4 {
     }
     public normalize(): Vector4 {
         var len = this.length();
-        return new Vector4(this.x / len, this.y / len, this.z / len);
+        return new Vector4(this.x / len, this.y / len, this.z / len, this.w/len);
     }
     public clip(): Vector4 {
         return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
@@ -96,7 +96,7 @@ class Matrix44 {
         this.set(1, 1, this.get(1, 1) * y);
         this.set(2, 2, this.get(2, 2) * z);
     }
-    
+
     public translate(x: number, y: number, z: number) {
         this.set(3, 0, this.get(3, 0) + x);
         this.set(3, 1, this.get(3, 1) + y);
@@ -183,8 +183,10 @@ class Camera3D {
         v2w.setColumn(1, y.normalize());
         v2w.setColumn(2, dir.normalize().multi(-1));
         v2w.transpose();
-
+        
+        // 不能直接用position
         var translate = position.transform(v2w).multi(-1);
+        translate.w = 1;
         v2w.setColumn(3, translate);
 
         this.world2View = v2w;
@@ -193,17 +195,17 @@ class Camera3D {
 enum RenderMode { Color, Texture, Wireframe }
 class Screen3D {
     ndc2screen: Matrix44;
-    
+
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;
-    
+
     offline_canvas: HTMLCanvasElement;
     offline_ctx: CanvasRenderingContext2D;
-    
-    imageData:ImageData;
-    
-    rasterizer:Rasterizer;
-    
+
+    imageData: ImageData;
+
+    rasterizer: Rasterizer;
+
     constructor(width: number, height: number) {
         this.ndc2screen = new Matrix44();
         this.ndc2screen.set(0, 0, width / 2);
@@ -218,24 +220,24 @@ class Screen3D {
         this.canvas.height = height;
         this.ctx = this.canvas.getContext("2d");
         document.body.appendChild(this.canvas);
-        
+
         this.offline_canvas = document.createElement("canvas");
         this.offline_canvas.width = width;
         this.offline_canvas.height = height;
         this.offline_ctx = this.offline_canvas.getContext("2d");
-        
-        
-        
+
+
+
         this.imageData = this.offline_ctx.createImageData(width, height);
-        
+
         this.rasterizer = new Rasterizer(this.imageData);
-        
+
     }
-    
-    commit() {   
+
+    commit() {
         this.ctx.putImageData(this.imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
     }
-    
+
 
     round(n: number): number {
         if (n - Math.floor(n) > 0.5)
@@ -248,31 +250,31 @@ class Screen3D {
 }
 class Rasterizer {
     mode: RenderMode;
-    
-    texture:Texture3D;
-    imageData:ImageData;
-    zbuf:number[];
-    
-    constructor(imageData:ImageData) {
-        
+
+    texture: Texture3D;
+    imageData: ImageData;
+    zbuf: number[];
+
+    constructor(imageData: ImageData) {
+
         this.imageData = imageData;
-        this.zbuf = new Array(imageData.data.length/4);
+        this.zbuf = new Array(imageData.data.length / 4);
     }
-    
+
     prepare() {
-        
+
         for (var i = 0; i < this.imageData.data.length; i++) {
-            this.imageData.data[i] = 0;
+            this.imageData.data[i] = 0xee;
         }
-        
+
         for (var i = 0; i < this.zbuf.length; i++) {
             this.zbuf[i] = 0xffffffff;
         }
     }
-    
+
     rasterizeBetweenLineSeg(startY: number, endY: number, leftTop: Vertex3D, leftBtm: Vertex3D, rightTop: Vertex3D, rightBtm: Vertex3D) {
-        
-        var r:number, g:number, b:number, a:number;
+
+        var r: number, g: number, b: number, a: number;
         for (var y = startY; y < endY; y++) {
 
             var t1 = (y - leftTop.y) / (leftBtm.y - leftTop.y);
@@ -302,7 +304,7 @@ class Rasterizer {
 
             var recipZs = (1 - t1) / leftTop.w + t1 / leftBtm.w;
             var recipZe = (1 - t2) / rightTop.w + t2 / rightBtm.w;
-           
+
 
 
             var roundsx = Math.round(sx);
@@ -316,22 +318,22 @@ class Rasterizer {
                 if (t3 < 0) t3 = 0;
 
                 var Zm = 1 / ((1 - t3) * recipZs + t3 * recipZe);
-                
-                if (Zm < this.zbuf[y*this.imageData.width + x]) {
-                    this.zbuf[y*this.imageData.width + x] = Zm;
+
+                if (Zm < this.zbuf[y * this.imageData.width + x]) {
+                    this.zbuf[y * this.imageData.width + x] = Zm;
                 }
                 else {
                     continue;
                 }
-                
+
                 var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
                 var cm = cmByzm.multi(Zm);
                 
                 /**
                  * rgb里必须是整数
                  */
-                
-                
+
+
                 if (this.mode == RenderMode.Color) {
                     r = Math.min(255, Math.ceil(cm.x));
                     g = Math.min(255, Math.ceil(cm.y));
@@ -352,9 +354,9 @@ class Rasterizer {
                 this.imageData.data[offset + 1] = g;
                 this.imageData.data[offset + 2] = b;
                 this.imageData.data[offset + 3] = a;
-                
-                
-              
+
+
+
             }
 
         }
@@ -397,9 +399,9 @@ class Rasterizer {
             this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pc, pa, pb);
         }
         else {
-            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pb, pa, pc);   
+            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pb, pa, pc);
         }
-        
+
         if (gradientBC < gradientAC) {
             this.rasterizeBetweenLineSeg(roundBy, roundCy, pa, pc, pb, pc);
         }
@@ -414,7 +416,7 @@ class Rasterizer {
 
 class Object3D {
     surfaceList: Surface3D[] = new Array();
-    renderMode:RenderMode = RenderMode.Texture;    
+    renderMode: RenderMode = RenderMode.Texture;
     matrix: Matrix44 = new Matrix44;
 }
 
@@ -426,8 +428,8 @@ class Surface3D {
 }
 
 class Cube3D extends Object3D {
-     
-    
+
+
     constructor() {
         super();
         var v0 = new Vector4(-1, 1, 1);
@@ -438,8 +440,8 @@ class Cube3D extends Object3D {
         var v5 = new Vector4(1, 1, -1);
         var v6 = new Vector4(-1, -1, -1);
         var v7 = new Vector4(1, -1, -1);
-        
-        var surface:Surface3D;
+
+        var surface: Surface3D;
         
         // Front
         surface = new Surface3D();
@@ -448,10 +450,11 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
+        
         
         // Back
         surface = new Surface3D();
@@ -460,7 +463,7 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v7, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
@@ -472,7 +475,7 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
@@ -484,7 +487,7 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v2, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);        
@@ -496,7 +499,7 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v5, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v0, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v1, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface); 
@@ -508,10 +511,10 @@ class Cube3D extends Object3D {
         surface.vertexArray.push(new Vertex3D(v3, new Vector4(0, 255, 0, 255), new Vector4(1, 0, 0)));
         surface.vertexArray.push(new Vertex3D(v6, new Vector4(0, 0, 255, 255), new Vector4(0, 1, 0)));
         surface.vertexArray.push(new Vertex3D(v7, new Vector4(255, 255, 255, 255), new Vector4(1, 1, 0)));
-        
+
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
-        this.surfaceList.push(surface);     
+        this.surfaceList.push(surface);
     }
 }
 
@@ -590,11 +593,11 @@ class Texture3D {
             if (row < 0)
                 row = 0;
             if (row >= this.width)
-                row = this.width-1;
+                row = this.width - 1;
             if (col < 0)
                 col = 0;
             if (col >= this.height)
-                col = this.height-1;
+                col = this.height - 1;
             var offset = 4 * (row * this.width + col)
             return new Vector4(this.rawData[offset + 0], this.rawData[offset + 1], this.rawData[offset + 2], this.rawData[offset + 3]);
         }
@@ -615,11 +618,90 @@ class Texture3D {
     }
 }
 
+class Clipping {
+    
+    
+    static clip(pc0:Vertex3D, pc1:Vertex3D, pc2:Vertex3D):Vertex3D[]
+    {
+        var inputVertexList:Vertex3D[] = new Array();
+        var outputVertexList:Vertex3D[]  = new Array();
+        inputVertexList.push(pc1);
+        inputVertexList.push(pc2);
+        inputVertexList.push(pc0);
+        
+        var prevPoint = pc0;
+        var prevVisible = this.isVisible(pc0)
+        
+        for (var i = 0; i < inputVertexList.length; i++)
+        {
+            var curPoint = inputVertexList[i];
+            var curVisible= this.isVisible(curPoint);
+            if (prevVisible && curVisible) {
+                outputVertexList.push(prevPoint);
+            }
+            else if (prevVisible && !curVisible) {
+                var t = this.getPercent(prevPoint.position, curPoint.position)
+                outputVertexList.push(prevPoint);
+                outputVertexList.push(this.getIntersection(prevPoint, curPoint));
+            }
+            else if (!prevVisible && curVisible) {
+                var t = this.getPercent(curPoint.position, prevPoint.position)
+                outputVertexList.push(this.getIntersection(curPoint, prevPoint));
+            } 
+            prevPoint = curPoint;
+            prevVisible = curVisible;
+        }
+        return outputVertexList;
+    }
+    
+    static getIntersection(pInside:Vertex3D, pOutside:Vertex3D) {
+        var t = this.getPercent(pInside.position, pOutside.position);   
+        var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1-t));
+        var newColor = pInside.color.multi(t).add(pOutside.color.multi(1-t));
+        var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1-t));
+        return new Vertex3D(newPoint, newColor, newUv); 
+    }
+    
+    static getPercent(pInside:Vector4, pOutside:Vector4):number {
+        var t = 0;
+        if (pOutside.x <= -1*pOutside.w) { // x+w < 0
+            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w))) 
+        }
+        
+        if (pOutside.x >= pOutside.w) { // x-w > 0
+            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w))) 
+        }
+        
+        if (pOutside.y <= -1*pOutside.w) { // y+w < 0
+            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w))) 
+        }
+        
+        if (pOutside.y >= pOutside.w) { // y-w > 0
+            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w))) 
+        }
+        
+        if (pOutside.z <= -1*pOutside.w) { // z+w < 0
+            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w))) 
+        }
+        
+        if (pOutside.z >= pOutside.w) { // z-w > 0
+            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w))) 
+        }
+        return t;
+    }
+    
+    static isVisible(v:Vertex3D):boolean
+    {
+        return (v.x <= v.w) && (v.x >= -1* v.w) 
+        && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
+    }
+}
+
 class Scene3D {
     objectArray: Object3D[] = new Array();
     camera: Camera3D;
     screen: Screen3D;
-    
+
     public setCamera(camera: Camera3D) {
         this.camera = camera;
     }
@@ -633,18 +715,18 @@ class Scene3D {
     }
 
     public render(mode: RenderMode) {
-        
+
         this.screen.rasterizer.prepare();
         for (var o = 0; o < this.objectArray.length; o++) {
             var obj = this.objectArray[o];
             this.screen.rasterizer.mode = obj.renderMode;
             for (var s = 0; s < obj.surfaceList.length; s++) {
                 var surface = obj.surfaceList[s];
-                
+
                 this.screen.rasterizer.texture = surface.texture;
-                
+
                 this.screen.rasterizer.imageData = this.screen.imageData;
-                
+
                 var vertexArray = surface.vertexArray;
                 var indexArray = surface.indexArray;
                 var triangleNum = indexArray.length / 3;
@@ -657,29 +739,29 @@ class Scene3D {
                     var pm2 = vertexArray[i2];
 
                     var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc0 = pv0.transform(this.camera.view2Clipping);
-                    var ps0 = pc0.clip().transform(this.screen.ndc2screen);
-
                     var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc1 = pv1.transform(this.camera.view2Clipping);
-                    var ps1 = pc1.clip().transform(this.screen.ndc2screen);
-
                     var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc2 = pv2.transform(this.camera.view2Clipping);
-                    var ps2 = pc2.clip().transform(this.screen.ndc2screen);
 
-
-                    ps0.w = pc0.w;
-                    ps1.w = pc1.w;
-                    ps2.w = pc2.w;
-                    
-                    
-                    
                     var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                     if (pv0.dot(normal) < 0) {
-                        this.screen.rasterizer.rasterize(new Vertex3D(ps0, pm0.color, pm0.uv), new Vertex3D(ps1, pm1.color, pm1.uv), new Vertex3D(ps2, pm2.color, pm2.uv));
+                                                
+                        var pc0 = pv0.transform(this.camera.view2Clipping);
+                        var pc1 = pv1.transform(this.camera.view2Clipping);
+                        var pc2 = pv2.transform(this.camera.view2Clipping);
+                        
+                        var pcList = Clipping.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+                        
+                        var psList = this.clipDivide(pcList);
+                        if (psList.length >= 3) {
+                            this.screen.rasterizer.rasterize(psList[0], psList[1], psList[2]);
+                            if (psList.length >= 4)
+                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);    
+                        }
+                       
+                        
+                        
                     }
-                    
+
                 }
             }
 
@@ -688,6 +770,16 @@ class Scene3D {
         requestAnimationFrame(() => this.render(mode));
     }
 
+    clipDivide(pcList:Vertex3D[]):Vertex3D[] {
+        var psList = new Array();
+         for (var j = 0; j < pcList.length; j++) {
+            var pc = pcList[j];
+            var ps = pc.position.clip().transform(this.screen.ndc2screen);
+            ps.w = pc.w;
+            psList.push(new Vertex3D(ps, pc.color, pc.uv));
+        }
+        return psList;
+    }
     public start(mode: RenderMode) {
 
         requestAnimationFrame(() => this.render(mode));

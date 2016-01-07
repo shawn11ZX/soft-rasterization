@@ -35,7 +35,7 @@ var Vector4 = (function () {
     };
     Vector4.prototype.normalize = function () {
         var len = this.length();
-        return new Vector4(this.x / len, this.y / len, this.z / len);
+        return new Vector4(this.x / len, this.y / len, this.z / len, this.w / len);
     };
     Vector4.prototype.clip = function () {
         return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
@@ -164,7 +164,9 @@ var Camera3D = (function () {
         v2w.setColumn(1, y.normalize());
         v2w.setColumn(2, dir.normalize().multi(-1));
         v2w.transpose();
+        // 不能直接用position
         var translate = position.transform(v2w).multi(-1);
+        translate.w = 1;
         v2w.setColumn(3, translate);
         this.world2View = v2w;
     };
@@ -216,7 +218,7 @@ var Rasterizer = (function () {
     }
     Rasterizer.prototype.prepare = function () {
         for (var i = 0; i < this.imageData.data.length; i++) {
-            this.imageData.data[i] = 0;
+            this.imageData.data[i] = 0xee;
         }
         for (var i = 0; i < this.zbuf.length; i++) {
             this.zbuf[i] = 0xffffffff;
@@ -507,6 +509,72 @@ var Texture3D = (function () {
     };
     return Texture3D;
 })();
+var Clipping = (function () {
+    function Clipping() {
+    }
+    Clipping.clip = function (pc0, pc1, pc2) {
+        var inputVertexList = new Array();
+        var outputVertexList = new Array();
+        inputVertexList.push(pc1);
+        inputVertexList.push(pc2);
+        inputVertexList.push(pc0);
+        var prevPoint = pc0;
+        var prevVisible = this.isVisible(pc0);
+        for (var i = 0; i < inputVertexList.length; i++) {
+            var curPoint = inputVertexList[i];
+            var curVisible = this.isVisible(curPoint);
+            if (prevVisible && curVisible) {
+                outputVertexList.push(prevPoint);
+            }
+            else if (prevVisible && !curVisible) {
+                var t = this.getPercent(prevPoint.position, curPoint.position);
+                outputVertexList.push(prevPoint);
+                outputVertexList.push(this.getIntersection(prevPoint, curPoint));
+            }
+            else if (!prevVisible && curVisible) {
+                var t = this.getPercent(curPoint.position, prevPoint.position);
+                outputVertexList.push(this.getIntersection(curPoint, prevPoint));
+            }
+            prevPoint = curPoint;
+            prevVisible = curVisible;
+        }
+        return outputVertexList;
+    };
+    Clipping.getIntersection = function (pInside, pOutside) {
+        var t = this.getPercent(pInside.position, pOutside.position);
+        var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1 - t));
+        var newColor = pInside.color.multi(t).add(pOutside.color.multi(1 - t));
+        var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1 - t));
+        return new Vertex3D(newPoint, newColor, newUv);
+    };
+    Clipping.getPercent = function (pInside, pOutside) {
+        var t = 0;
+        if (pOutside.x <= -1 * pOutside.w) {
+            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w)));
+        }
+        if (pOutside.x >= pOutside.w) {
+            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w)));
+        }
+        if (pOutside.y <= -1 * pOutside.w) {
+            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w)));
+        }
+        if (pOutside.y >= pOutside.w) {
+            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w)));
+        }
+        if (pOutside.z <= -1 * pOutside.w) {
+            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w)));
+        }
+        if (pOutside.z >= pOutside.w) {
+            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w)));
+        }
+        return t;
+    };
+    Clipping.isVisible = function (v) {
+        return (v.x <= v.w) && (v.x >= -1 * v.w)
+            && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
+    };
+    return Clipping;
+})();
 var Scene3D = (function () {
     function Scene3D() {
         this.objectArray = new Array();
@@ -541,26 +609,36 @@ var Scene3D = (function () {
                     var pm1 = vertexArray[i1];
                     var pm2 = vertexArray[i2];
                     var pv0 = pm0.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc0 = pv0.transform(this.camera.view2Clipping);
-                    var ps0 = pc0.clip().transform(this.screen.ndc2screen);
                     var pv1 = pm1.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc1 = pv1.transform(this.camera.view2Clipping);
-                    var ps1 = pc1.clip().transform(this.screen.ndc2screen);
                     var pv2 = pm2.position.transform(obj.matrix).transform(this.camera.world2View);
-                    var pc2 = pv2.transform(this.camera.view2Clipping);
-                    var ps2 = pc2.clip().transform(this.screen.ndc2screen);
-                    ps0.w = pc0.w;
-                    ps1.w = pc1.w;
-                    ps2.w = pc2.w;
                     var normal = pv0.sub(pv1).cross(pv0.sub(pv2));
                     if (pv0.dot(normal) < 0) {
-                        this.screen.rasterizer.rasterize(new Vertex3D(ps0, pm0.color, pm0.uv), new Vertex3D(ps1, pm1.color, pm1.uv), new Vertex3D(ps2, pm2.color, pm2.uv));
+                        var pc0 = pv0.transform(this.camera.view2Clipping);
+                        var pc1 = pv1.transform(this.camera.view2Clipping);
+                        var pc2 = pv2.transform(this.camera.view2Clipping);
+                        var pcList = Clipping.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+                        var psList = this.clipDivide(pcList);
+                        if (psList.length >= 3) {
+                            this.screen.rasterizer.rasterize(psList[0], psList[1], psList[2]);
+                            if (psList.length >= 4)
+                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);
+                        }
                     }
                 }
             }
         }
         this.screen.commit();
         requestAnimationFrame(function () { return _this.render(mode); });
+    };
+    Scene3D.prototype.clipDivide = function (pcList) {
+        var psList = new Array();
+        for (var j = 0; j < pcList.length; j++) {
+            var pc = pcList[j];
+            var ps = pc.position.clip().transform(this.screen.ndc2screen);
+            ps.w = pc.w;
+            psList.push(new Vertex3D(ps, pc.color, pc.uv));
+        }
+        return psList;
     };
     Scene3D.prototype.start = function (mode) {
         var _this = this;
