@@ -297,8 +297,6 @@ class Rasterizer {
             var recipZs = (1 - t1) / leftTop.w + t1 / leftBtm.w;
             var recipZe = (1 - t2) / rightTop.w + t2 / rightBtm.w;
 
-
-
             var roundsx = Math.round(sx);
             var roundex = Math.round(ex);
 
@@ -318,42 +316,34 @@ class Rasterizer {
                     continue;
                 }
 
+
                 var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
                 var cm = cmByzm.multi(Zm);
-                
-                /**
-                 * rgb里必须是整数
-                 */
-
-
                 if (this.mode == RenderMode.Color) {
                     r = Math.min(255, Math.ceil(cm.x));
                     g = Math.min(255, Math.ceil(cm.y));
                     b = Math.min(255, Math.ceil(cm.z));
                     a = Math.min(255, Math.ceil(cm.w));
                 }
-                else {
+                else if (this.mode == RenderMode.Texture) {
                     var color = this.texture.pick(cm.x, cm.y);
                     r = color.x;
                     g = color.y;
                     b = color.z;
                     a = color.w;
                 }
-                
+            
                 // y is row
-                var offset = 4 * (y * this.imageData.width + x);
-                this.imageData.data[offset + 0] = r;
-                this.imageData.data[offset + 1] = g;
-                this.imageData.data[offset + 2] = b;
-                this.imageData.data[offset + 3] = a;
-
-
-
+                this.drawPixel(r, g, b, a, x, y);
             }
-
         }
-
-
+    }
+    drawPixel(r: number, g: number: b: number, a: number, x: number, y: number) {
+        var offset = 4 * (y * this.imageData.width + x);
+        this.imageData.data[offset + 0] = r;
+        this.imageData.data[offset + 1] = g;
+        this.imageData.data[offset + 2] = b;
+        this.imageData.data[offset + 3] = a;
     }
     /**
      * Given three points with:
@@ -758,7 +748,7 @@ class Scene3D {
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
 
-                        var pcList:Vertex3D[][] = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+                        var pcList: Vertex3D[][] = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
                         this.rasterizeTriangles(pcList);
 
                     }
@@ -770,15 +760,14 @@ class Scene3D {
         this.screen.commit();
         requestAnimationFrame(() => this.render(mode));
     }
-    
-    rasterizeTriangles(pcList:Vertex3D[][])
-    {
+
+    rasterizeTriangles(pcList: Vertex3D[][]) {
         for (var i = 0; i < pcList.length; i++) {
             var psList = this.clipToScreen(pcList[i]);
             this.screen.rasterizer.rasterizeTriangle(psList[0], psList[1], psList[2]);
         }
     }
-    
+
     clipToScreen(pcList: Vertex3D[]): Vertex3D[] {
         var psList = new Array();
         for (var j = 0; j < pcList.length; j++) {
@@ -789,7 +778,7 @@ class Scene3D {
         }
         return psList;
     }
-    
+
     public start(mode: RenderMode) {
 
         requestAnimationFrame(() => this.render(mode));

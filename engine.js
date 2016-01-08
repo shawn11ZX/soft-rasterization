@@ -258,16 +258,13 @@ var Rasterizer = (function () {
                 }
                 var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
                 var cm = cmByzm.multi(Zm);
-                /**
-                 * rgb里必须是整数
-                 */
                 if (this.mode == RenderMode.Color) {
                     r = Math.min(255, Math.ceil(cm.x));
                     g = Math.min(255, Math.ceil(cm.y));
                     b = Math.min(255, Math.ceil(cm.z));
                     a = Math.min(255, Math.ceil(cm.w));
                 }
-                else {
+                else if (this.mode == RenderMode.Texture) {
                     var color = this.texture.pick(cm.x, cm.y);
                     r = color.x;
                     g = color.y;
@@ -275,13 +272,16 @@ var Rasterizer = (function () {
                     a = color.w;
                 }
                 // y is row
-                var offset = 4 * (y * this.imageData.width + x);
-                this.imageData.data[offset + 0] = r;
-                this.imageData.data[offset + 1] = g;
-                this.imageData.data[offset + 2] = b;
-                this.imageData.data[offset + 3] = a;
+                this.drawPixel(r, g, b, a, x, y);
             }
         }
+    };
+    Rasterizer.prototype.drawPixel = function (r, g, b, a, x, y) {
+        var offset = 4 * (y * this.imageData.width + x);
+        this.imageData.data[offset + 0] = r;
+        this.imageData.data[offset + 1] = g;
+        this.imageData.data[offset + 2] = b;
+        this.imageData.data[offset + 3] = a;
     };
     /**
      * Given three points with:
