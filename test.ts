@@ -1,3 +1,4 @@
+/// <reference path="engine.ts"/>
 
 
 function testRasterize() {
@@ -22,7 +23,7 @@ function testRasterize() {
     );
 
     var screen = new Screen3D(1024, 768);
-    screen.rasterize(v1, v2, v3, RenderMode.Color);
+    screen.rasterizer.rasterizeTriangle(v1, v2, v3);
 
     var transRight = new Vector4(400, 0, 0);
 
@@ -41,7 +42,7 @@ function testRasterize() {
         new Vector4(0, 0, 255)
     );
     
-    screen.rasterize(v1, v2, v3, RenderMode.Color);
+    screen.rasterizer.rasterizeTriangle(v1, v2, v3);
 }
 
 function testScreen3d() {
@@ -67,7 +68,7 @@ function testScreen3d() {
         new Vector4(0, 0, 255)
     );
     
-    screen.rasterize(v1, v2, v3, RenderMode.Color);
+    screen.rasterizer.rasterizeTriangle(v1, v2, v3);
 }
 
 
@@ -81,23 +82,23 @@ function testPerspective() {
     var camera = new Camera3D(screen, 90 * 3.14 / 180 , 5 / 4, 0.01, 1000);
 
     var v1 = new Vertex3D(
-        p1.transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p1.transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(255, 0, 0)
     );
 
     var v2 = new Vertex3D(
-        p2.transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p2.transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(0, 255, 0)
     );
 
     var v3 = new Vertex3D(
-        p3.transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p3.transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(0, 0, 255)
     );
 
 
 
-    screen.rasterize(v1, v2, v3, RenderMode.Color);
+    screen.rasterizer.rasterizeTriangle(v1, v2, v3);
 }
 
 function testLookAt() {
@@ -112,23 +113,23 @@ function testLookAt() {
     camera.lookAt(new Vector4(0, 0, -100), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0))
     
     var v1 = new Vertex3D(
-        p1.transform(camera.world2View).transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p1.transform(camera.world2View).transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(255, 0, 0)
     );
 
     var v2 = new Vertex3D(
-        p2.transform(camera.world2View).transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p2.transform(camera.world2View).transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(0, 255, 0)
     );
 
     var v3 = new Vertex3D(
-        p3.transform(camera.world2View).transform(camera.view2Clipping).clip().transform(screen.ndc2screen),
+        p3.transform(camera.world2View).transform(camera.view2Clipping).perspectiveDivide().transform(screen.ndc2screen),
         new Vector4(0, 0, 255)
     );
 
 
 
-    screen.rasterize(v1, v2, v3, RenderMode.Color);
+    screen.rasterizer.rasterizeTriangle(v1, v2, v3);
 }
 
 function testPerspective2()
@@ -148,7 +149,7 @@ function testPerspective2()
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
     
     p2 = new Vector4(0, 0, -10);
@@ -156,49 +157,49 @@ function testPerspective2()
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
      p2 = new Vector4(0, 0, -20);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
     p2 = new Vector4(0, 0, -50);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
     p2 = new Vector4(0, 0, -300);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
     p2 = new Vector4(0, 0, -500);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
     p2 = new Vector4(0, 0, -900);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
     
         p2 = new Vector4(0, 0, -1000);
     p2p = p2.transform(camera.view2Clipping);
     console.log("========")
     console.log(p2);
     console.log(p2p);
-    console.log(p2p.clip());
+    console.log(p2p.perspectiveDivide());
 }
 
 function main() {

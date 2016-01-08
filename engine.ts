@@ -1,4 +1,3 @@
-/// <reference path="test.ts"/>
 
 
 
