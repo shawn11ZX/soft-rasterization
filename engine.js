@@ -37,7 +37,7 @@ var Vector4 = (function () {
         var len = this.length();
         return new Vector4(this.x / len, this.y / len, this.z / len, this.w / len);
     };
-    Vector4.prototype.clip = function () {
+    Vector4.prototype.perspectiveDivide = function () {
         return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
     };
     Vector4.prototype.transform = function (m) {
@@ -202,13 +202,6 @@ var Screen3D = (function () {
     Screen3D.prototype.commit = function () {
         this.ctx.putImageData(this.imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
     };
-    Screen3D.prototype.round = function (n) {
-        if (n - Math.floor(n) > 0.5)
-            n = Math.floor(n) + 1;
-        else
-            n = Math.floor(n);
-        return n;
-    };
     return Screen3D;
 })();
 var Rasterizer = (function () {
@@ -224,7 +217,7 @@ var Rasterizer = (function () {
             this.zbuf[i] = 0xffffffff;
         }
     };
-    Rasterizer.prototype.rasterizeBetweenLineSeg = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm) {
+    Rasterizer.prototype.rasterizeTrapezoid = function (startY, endY, leftTop, leftBtm, rightTop, rightBtm) {
         var r, g, b, a;
         for (var y = startY; y < endY; y++) {
             var t1 = (y - leftTop.y) / (leftBtm.y - leftTop.y);
@@ -297,7 +290,7 @@ var Rasterizer = (function () {
     * - color same as original
     * Draw the triangle
     */
-    Rasterizer.prototype.rasterize = function (p1, p2, p3) {
+    Rasterizer.prototype.rasterizeTriangle = function (p1, p2, p3) {
         // this.ctx.fillStyle = "rgb(255,255,255)";
         // this.ctx.fillRect(p1.x, p1.y, 2, 2);
         // this.ctx.fillRect(p2.x, p2.y, 2, 2);
@@ -318,16 +311,16 @@ var Rasterizer = (function () {
         var roundBy = Math.round(pb.y);
         var roundCy = Math.round(pc.y);
         if (gradientAC < gradientAB) {
-            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pc, pa, pb);
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
         }
         else {
-            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pb, pa, pc);
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
         }
         if (gradientBC < gradientAC) {
-            this.rasterizeBetweenLineSeg(roundBy, roundCy, pa, pc, pb, pc);
+            this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
         }
         else {
-            this.rasterizeBetweenLineSeg(roundBy, roundCy, pb, pc, pa, pc);
+            this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
         }
     };
     return Rasterizer;
@@ -391,7 +384,7 @@ var Cube3D = (function (_super) {
         surface.indexArray.push(0, 2, 3);
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
-        // LEft
+        // Left
         surface = new Surface3D();
         surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
@@ -520,10 +513,13 @@ var Texture3D = (function () {
     };
     return Texture3D;
 })();
-var Clipping = (function () {
-    function Clipping() {
+var ClippAlgorithm = (function () {
+    function ClippAlgorithm() {
     }
-    Clipping.clip = function (pc0, pc1, pc2) {
+    /**
+     * in homogenouse space
+     */
+    ClippAlgorithm.clip = function (pc0, pc1, pc2) {
         var inputVertexList = new Array();
         var outputVertexList = new Array();
         inputVertexList.push(pc1);
@@ -549,16 +545,27 @@ var Clipping = (function () {
             prevPoint = curPoint;
             prevVisible = curVisible;
         }
-        return outputVertexList;
+        var rc = new Array();
+        if (outputVertexList.length >= 3) {
+            var triangle = new Array();
+            triangle.push(outputVertexList[0], outputVertexList[1], outputVertexList[2]);
+            rc.push(triangle);
+            if (outputVertexList.length >= 4) {
+                var triangle = new Array();
+                triangle.push(outputVertexList[0], outputVertexList[2], outputVertexList[3]);
+                rc.push(triangle);
+            }
+        }
+        return rc;
     };
-    Clipping.getIntersection = function (pInside, pOutside) {
+    ClippAlgorithm.getIntersection = function (pInside, pOutside) {
         var t = this.getPercent(pInside.position, pOutside.position);
         var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1 - t));
         var newColor = pInside.color.multi(t).add(pOutside.color.multi(1 - t));
         var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1 - t));
         return new Vertex3D(newPoint, newColor, newUv);
     };
-    Clipping.getPercent = function (pInside, pOutside) {
+    ClippAlgorithm.getPercent = function (pInside, pOutside) {
         var t = 0;
         if (pOutside.x <= -1 * pOutside.w) {
             t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w)));
@@ -580,22 +587,18 @@ var Clipping = (function () {
         }
         return t;
     };
-    Clipping.isVisible = function (v) {
+    ClippAlgorithm.isVisible = function (v) {
         return (v.x <= v.w) && (v.x >= -1 * v.w)
             && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
     };
-    return Clipping;
+    return ClippAlgorithm;
 })();
 var Scene3D = (function () {
-    function Scene3D() {
+    function Scene3D(camer, screen) {
         this.objectArray = new Array();
-    }
-    Scene3D.prototype.setCamera = function (camera) {
-        this.camera = camera;
-    };
-    Scene3D.prototype.setScreen = function (screen) {
+        this.camera = camer;
         this.screen = screen;
-    };
+    }
     Scene3D.prototype.addObject = function (obj) {
         this.objectArray.push(obj);
     };
@@ -627,13 +630,8 @@ var Scene3D = (function () {
                         var pc0 = pv0.transform(this.camera.view2Clipping);
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
-                        var pcList = Clipping.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
-                        var psList = this.clipDivide(pcList);
-                        if (psList.length >= 3) {
-                            this.screen.rasterizer.rasterize(psList[0], psList[1], psList[2]);
-                            if (psList.length >= 4)
-                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);
-                        }
+                        var pcList = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+                        this.rasterizeTriangles(pcList);
                     }
                 }
             }
@@ -641,11 +639,17 @@ var Scene3D = (function () {
         this.screen.commit();
         requestAnimationFrame(function () { return _this.render(mode); });
     };
-    Scene3D.prototype.clipDivide = function (pcList) {
+    Scene3D.prototype.rasterizeTriangles = function (pcList) {
+        for (var i = 0; i < pcList.length; i++) {
+            var psList = this.clipToScreen(pcList[i]);
+            this.screen.rasterizer.rasterizeTriangle(psList[0], psList[1], psList[2]);
+        }
+    };
+    Scene3D.prototype.clipToScreen = function (pcList) {
         var psList = new Array();
         for (var j = 0; j < pcList.length; j++) {
             var pc = pcList[j];
-            var ps = pc.position.clip().transform(this.screen.ndc2screen);
+            var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
             ps.w = pc.w;
             psList.push(new Vertex3D(ps, pc.color, pc.uv));
         }

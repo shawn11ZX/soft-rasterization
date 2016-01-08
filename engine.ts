@@ -41,7 +41,8 @@ class Vector4 {
         var len = this.length();
         return new Vector4(this.x / len, this.y / len, this.z / len, this.w / len);
     }
-    public clip(): Vector4 {
+
+    public perspectiveDivide(): Vector4 {
         return new Vector4(this.x / this.w, this.y / this.w, this.z / this.w, 1);
     }
 
@@ -238,16 +239,8 @@ class Screen3D {
         this.ctx.putImageData(this.imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
     }
 
-
-    round(n: number): number {
-        if (n - Math.floor(n) > 0.5)
-            n = Math.floor(n) + 1;
-        else
-            n = Math.floor(n);
-        return n;
-    }
-
 }
+
 class Rasterizer {
     mode: RenderMode;
 
@@ -272,7 +265,7 @@ class Rasterizer {
         }
     }
 
-    rasterizeBetweenLineSeg(startY: number, endY: number, leftTop: Vertex3D, leftBtm: Vertex3D, rightTop: Vertex3D, rightBtm: Vertex3D) {
+    rasterizeTrapezoid(startY: number, endY: number, leftTop: Vertex3D, leftBtm: Vertex3D, rightTop: Vertex3D, rightBtm: Vertex3D) {
 
         var r: number, g: number, b: number, a: number;
         for (var y = startY; y < endY; y++) {
@@ -369,7 +362,7 @@ class Rasterizer {
     * - color same as original
     * Draw the triangle 
     */
-    rasterize(p1: Vertex3D, p2: Vertex3D, p3: Vertex3D) {
+    rasterizeTriangle(p1: Vertex3D, p2: Vertex3D, p3: Vertex3D) {
         
         
         // this.ctx.fillStyle = "rgb(255,255,255)";
@@ -396,17 +389,17 @@ class Rasterizer {
         var roundCy = Math.round(pc.y);
 
         if (gradientAC < gradientAB) {
-            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pc, pa, pb);
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
         }
         else {
-            this.rasterizeBetweenLineSeg(roundAy, roundBy, pa, pb, pa, pc);
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
         }
 
         if (gradientBC < gradientAC) {
-            this.rasterizeBetweenLineSeg(roundBy, roundCy, pa, pc, pb, pc);
+            this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
         }
         else {
-            this.rasterizeBetweenLineSeg(roundBy, roundCy, pb, pc, pa, pc);
+            this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
         }
 
     }
@@ -480,7 +473,7 @@ class Cube3D extends Object3D {
         surface.indexArray.push(0, 3, 1);
         this.surfaceList.push(surface);
 
-        // LEft
+        // Left
         surface = new Surface3D();
         surface.texture = texture;
         surface.vertexArray.push(new Vertex3D(v4, new Vector4(255, 0, 0, 255), new Vector4(0, 0, 0)));
@@ -626,10 +619,12 @@ class Texture3D {
     }
 }
 
-class Clipping {
+class ClippAlgorithm {
 
-
-    static clip(pc0: Vertex3D, pc1: Vertex3D, pc2: Vertex3D): Vertex3D[] {
+    /**
+     * in homogenouse space
+     */
+    static clip(pc0: Vertex3D, pc1: Vertex3D, pc2: Vertex3D): Vertex3D[][] {
         var inputVertexList: Vertex3D[] = new Array();
         var outputVertexList: Vertex3D[] = new Array();
         inputVertexList.push(pc1);
@@ -657,7 +652,20 @@ class Clipping {
             prevPoint = curPoint;
             prevVisible = curVisible;
         }
-        return outputVertexList;
+
+        var rc: Vertex3D[][] = new Array();
+        if (outputVertexList.length >= 3) {
+            var triangle = new Array();
+            triangle.push(outputVertexList[0], outputVertexList[1], outputVertexList[2]);
+            rc.push(triangle);
+            if (outputVertexList.length >= 4) {
+                var triangle = new Array();
+                triangle.push(outputVertexList[0], outputVertexList[2], outputVertexList[3]);
+                rc.push(triangle);
+            }
+        }
+
+        return rc;
     }
 
     static getIntersection(pInside: Vertex3D, pOutside: Vertex3D) {
@@ -707,11 +715,8 @@ class Scene3D {
     camera: Camera3D;
     screen: Screen3D;
 
-    public setCamera(camera: Camera3D) {
-        this.camera = camera;
-    }
-
-    public setScreen(screen: Screen3D) {
+    constructor(camer: Camera3D, screen: Screen3D) {
+        this.camera = camer;
         this.screen = screen;
     }
 
@@ -754,16 +759,8 @@ class Scene3D {
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
 
-                        var pcList = Clipping.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
-
-                        var psList = this.clipDivide(pcList);
-                        if (psList.length >= 3) {
-                            this.screen.rasterizer.rasterize(psList[0], psList[1], psList[2]);
-                            if (psList.length >= 4)
-                                this.screen.rasterizer.rasterize(psList[0], psList[2], psList[3]);
-                        }
-
-
+                        var pcList:Vertex3D[][] = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+                        this.rasterizeTriangles(pcList);
 
                     }
 
@@ -774,17 +771,26 @@ class Scene3D {
         this.screen.commit();
         requestAnimationFrame(() => this.render(mode));
     }
-
-    clipDivide(pcList: Vertex3D[]): Vertex3D[] {
+    
+    rasterizeTriangles(pcList:Vertex3D[][])
+    {
+        for (var i = 0; i < pcList.length; i++) {
+            var psList = this.clipToScreen(pcList[i]);
+            this.screen.rasterizer.rasterizeTriangle(psList[0], psList[1], psList[2]);
+        }
+    }
+    
+    clipToScreen(pcList: Vertex3D[]): Vertex3D[] {
         var psList = new Array();
         for (var j = 0; j < pcList.length; j++) {
             var pc = pcList[j];
-            var ps = pc.position.clip().transform(this.screen.ndc2screen);
+            var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
             ps.w = pc.w;
             psList.push(new Vertex3D(ps, pc.color, pc.uv));
         }
         return psList;
     }
+    
     public start(mode: RenderMode) {
 
         requestAnimationFrame(() => this.render(mode));
