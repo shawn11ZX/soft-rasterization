@@ -116,7 +116,7 @@ function main() {
     cube.matrix.translate(50, 0, 0);
     scene.addObject(cube);
     cube = new Cube3D();
-    cube.renderMode = RenderMode.Color;
+    cube.renderMode = RenderMode.Wireframe;
     cube.matrix.scale(10, 10, 10);
     cube.matrix.translate(-50, 0, 0);
     scene.addObject(cube);

@@ -250,10 +250,7 @@ var Rasterizer = (function () {
                 if (t3 < 0)
                     t3 = 0;
                 var Zm = 1 / ((1 - t3) * recipZs + t3 * recipZe);
-                if (Zm < this.zbuf[y * this.imageData.width + x]) {
-                    this.zbuf[y * this.imageData.width + x] = Zm;
-                }
-                else {
+                if (!this.testZ(x, y, Zm)) {
                     continue;
                 }
                 var cmByzm = csByZs.multi((1 - t3)).add(ceByZe.multi(t3));
@@ -276,12 +273,58 @@ var Rasterizer = (function () {
             }
         }
     };
+    Rasterizer.prototype.testZ = function (x, y, Zm) {
+        if (Zm < this.zbuf[y * this.imageData.width + x]) {
+            this.zbuf[y * this.imageData.width + x] = Zm;
+            return true;
+        }
+        else {
+            return false;
+        }
+    };
     Rasterizer.prototype.drawPixel = function (r, g, b, a, x, y) {
         var offset = 4 * (y * this.imageData.width + x);
         this.imageData.data[offset + 0] = r;
         this.imageData.data[offset + 1] = g;
         this.imageData.data[offset + 2] = b;
         this.imageData.data[offset + 3] = a;
+    };
+    Rasterizer.prototype.rasterizeLine = function (top, bottom) {
+        var diffY = bottom.y - top.y;
+        var diffX = bottom.x - top.x;
+        if (Math.abs(diffY) > Math.abs(diffX)) {
+            var startY = Math.round(top.y);
+            var endY = Math.round(bottom.y);
+            for (var y = startY; y < endY; y++) {
+                var t = (y - top.y) / (bottom.y - top.y);
+                var x = Math.round(top.x * (1 - t) + bottom.x * t);
+                var z = Math.round(top.w * (1 - t) + bottom.w * t);
+                if (this.testZ(x, y, z)) {
+                    this.drawPixel(0, 0, 255, 255, x, y);
+                }
+            }
+        }
+        else {
+            var left, right;
+            if (top.x > bottom.x) {
+                left = bottom;
+                right = top;
+            }
+            else {
+                left = top;
+                right = bottom;
+            }
+            var startX = Math.round(left.x);
+            var endX = Math.round(right.x);
+            for (var x = startX; x < endX; x++) {
+                var t = (x - left.x) / (right.x - left.x);
+                var y = Math.round(left.y * (1 - t) + right.y * t);
+                var z = Math.round(left.w * (1 - t) + right.w * t);
+                if (this.testZ(x, y, z)) {
+                    this.drawPixel(0, 0, 255, 255, x, y);
+                }
+            }
+        }
     };
     /**
      * Given three points with:
@@ -299,27 +342,34 @@ var Rasterizer = (function () {
         var pa = vertexArray[0];
         var pb = vertexArray[1];
         var pc = vertexArray[2];
-        var diffYup = Math.ceil(pb.y - pa.y);
-        /**
-         * Y/X会导致不统一，换成X/Y
-         */
-        var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
-        var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
-        var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
-        var roundAy = Math.round(pa.y);
-        var roundBy = Math.round(pb.y);
-        var roundCy = Math.round(pc.y);
-        if (gradientAC < gradientAB) {
-            this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
+        if (this.mode == RenderMode.Wireframe) {
+            this.rasterizeLine(pa, pb);
+            this.rasterizeLine(pa, pc);
+            this.rasterizeLine(pb, pc);
         }
         else {
-            this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
-        }
-        if (gradientBC < gradientAC) {
-            this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
-        }
-        else {
-            this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
+            var diffYup = Math.ceil(pb.y - pa.y);
+            /**
+             * Y/X会导致不统一，换成X/Y
+             */
+            var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
+            var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
+            var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
+            var roundAy = Math.round(pa.y);
+            var roundBy = Math.round(pb.y);
+            var roundCy = Math.round(pc.y);
+            if (gradientAC < gradientAB) {
+                this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
+            }
+            else {
+                this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
+            }
+            if (gradientBC < gradientAC) {
+                this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
+            }
+            else {
+                this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
+            }
         }
     };
     return Rasterizer;
