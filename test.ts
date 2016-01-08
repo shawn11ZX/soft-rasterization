@@ -204,7 +204,7 @@ function testPerspective2() {
 function main() {
 
     var screen = new Screen3D(1024, 768);
-    var camera = new Camera3D(screen, 90 * 3.14 / 180, 5 / 4, 1, 1000);
+    var camera = new Camera3D(screen, 90 * 3.14 / 180, 5 / 4, 0.001, 1000);
     camera.lookAt(new Vector4(0, 0, 50), new Vector4(0, 0, 0), new Vector4(0, 1, 0, 0));
 
     var scene = new Scene3D(camera, screen);
@@ -228,7 +228,7 @@ function main() {
 
 
 
-    scene.start(RenderMode.Texture);
+    scene.start();
 }
 
 //testRasterize();

@@ -310,8 +310,7 @@ class Rasterizer {
                 var Zm = 1 / ((1 - t3) * recipZs + t3 * recipZe);
 
 
-                if (!this.testZ(x, y, Zm))
-                {
+                if (!this.testZ(x, y, Zm)) {
                     continue;
                 }
 
@@ -347,6 +346,10 @@ class Rasterizer {
         }
     }
     drawPixel(r: number, g: number, b: number, a: number, x: number, y: number) {
+        if (x >= this.imageData.width)
+            x = this.imageData.width - 1;
+        if (y >= this.imageData.height)
+            y = this.imageData.height - 1;
         var offset = 4 * (y * this.imageData.width + x);
         this.imageData.data[offset + 0] = r;
         this.imageData.data[offset + 1] = g;
@@ -354,15 +357,27 @@ class Rasterizer {
         this.imageData.data[offset + 3] = a;
     }
 
-    rasterizeLine(top: Vertex3D, bottom: Vertex3D) {
-        
-        var diffY = bottom.y - top.y;
-        var diffX = bottom.x - top.x;
+    rasterizeLine(pa: Vertex3D, pb: Vertex3D) {
+
+        var diffY = pb.y - pa.y;
+        var diffX = pb.x - pa.x;
         if (Math.abs(diffY) > Math.abs(diffX)) {
+            var top: Vertex3D, bottom: Vertex3D;
+            if (pa.y < pb.y) {
+                top = pa;
+                bottom = pb;
+            } else {
+                top = pb;
+                bottom = pa;
+            }
             var startY = Math.round(top.y);
             var endY = Math.round(bottom.y);
             for (var y = startY; y < endY; y++) {
                 var t = (y - top.y) / (bottom.y - top.y);
+                if (t < 0)
+                    t = 0;
+                if (t > 1)
+                    t = 1;
                 var x = Math.round(top.x * (1 - t) + bottom.x * t);
                 var z = Math.round(top.w * (1 - t) + bottom.w * t);
                 if (this.testZ(x, y, z)) {
@@ -370,19 +385,23 @@ class Rasterizer {
                 }
             }
         } else {
+
             var left, right;
-            if (top.x > bottom.x)
-            {
-                left = bottom;
-                right = top;
+            if (pa.x > pb.x) {
+                left = pb;
+                right = pa;
             } else {
-                left = top;
-                right = bottom;
+                left = pa;
+                right = pb;
             }
             var startX = Math.round(left.x);
             var endX = Math.round(right.x);
             for (var x = startX; x < endX; x++) {
                 var t = (x - left.x) / (right.x - left.x);
+                if (t < 0)
+                    t = 0;
+                if (t > 1)
+                    t = 1;
                 var y = Math.round(left.y * (1 - t) + right.y * t);
                 var z = Math.round(left.w * (1 - t) + right.w * t);
                 if (this.testZ(x, y, z)) {
@@ -411,37 +430,33 @@ class Rasterizer {
         var pb = vertexArray[1];
         var pc = vertexArray[2];
 
-        if (this.mode == RenderMode.Wireframe) {
-            this.rasterizeLine(pa, pb);
-            this.rasterizeLine(pa, pc);
-            this.rasterizeLine(pb, pc);
-        } else {
-            var diffYup = Math.ceil(pb.y - pa.y);
-            /**
-             * Y/X会导致不统一，换成X/Y
-             */
-            var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
-            var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
-            var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
 
-            var roundAy = Math.round(pa.y);
-            var roundBy = Math.round(pb.y);
-            var roundCy = Math.round(pc.y);
+        var diffYup = Math.ceil(pb.y - pa.y);
+        /**
+         * Y/X会导致不统一，换成X/Y
+         */
+        var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
+        var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
+        var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
 
-            if (gradientAC < gradientAB) {
-                this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
-            }
-            else {
-                this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
-            }
+        var roundAy = Math.round(pa.y);
+        var roundBy = Math.round(pb.y);
+        var roundCy = Math.round(pc.y);
 
-            if (gradientBC < gradientAC) {
-                this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
-            }
-            else {
-                this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
-            }
+        if (gradientAC < gradientAB) {
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
         }
+        else {
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
+        }
+
+        if (gradientBC < gradientAC) {
+            this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
+        }
+        else {
+            this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
+        }
+
     }
 }
 
@@ -660,93 +675,72 @@ class Texture3D {
 }
 
 class ClippAlgorithm {
-
+    static planes: Vector4[] = [
+        new Vector4(1, 0, 0, 1),
+        new Vector4(-1, 0, 0, 1),
+        new Vector4(0, 1, 0, 1),
+        new Vector4(0, -1, 0, 1),
+        new Vector4(0, 0, 1, 1),
+        new Vector4(0, 0, -1, 1)
+    ];
     /**
      * in homogenouse space
      */
-    static clip(pc0: Vertex3D, pc1: Vertex3D, pc2: Vertex3D): Vertex3D[][] {
+    static clip(pc0: Vertex3D, pc1: Vertex3D, pc2: Vertex3D): Vertex3D[] {
         var inputVertexList: Vertex3D[] = new Array();
-        var outputVertexList: Vertex3D[] = new Array();
+
+        inputVertexList.push(pc0);
         inputVertexList.push(pc1);
         inputVertexList.push(pc2);
-        inputVertexList.push(pc0);
 
-        var prevPoint = pc0;
-        var prevVisible = this.isVisible(pc0)
+        for (var p = 0; p < ClippAlgorithm.planes.length && inputVertexList.length >= 3; p++) {
+            var plane = ClippAlgorithm.planes[p];
+            var outputVertexList: Vertex3D[] = new Array();
 
-        for (var i = 0; i < inputVertexList.length; i++) {
-            var curPoint = inputVertexList[i];
-            var curVisible = this.isVisible(curPoint);
-            if (prevVisible && curVisible) {
-                outputVertexList.push(prevPoint);
+            var prevPoint = inputVertexList[inputVertexList.length - 1];
+            var prevVisible = this.isVisible(prevPoint, plane);
+
+            for (var i = 0; i < inputVertexList.length; i++) {
+                var curPoint = inputVertexList[i];
+                var curVisible = this.isVisible(curPoint, plane);
+                if (prevVisible && curVisible) {
+                    outputVertexList.push(prevPoint);
+                }
+                else if (prevVisible && !curVisible) {
+
+                    outputVertexList.push(prevPoint);
+                    outputVertexList.push(this.getIntersection(prevPoint, curPoint, plane));
+                }
+                else if (!prevVisible && curVisible) {
+                    outputVertexList.push(this.getIntersection(curPoint, prevPoint, plane));
+                }
+                prevPoint = curPoint;
+                prevVisible = curVisible;
             }
-            else if (prevVisible && !curVisible) {
-                var t = this.getPercent(prevPoint.position, curPoint.position)
-                outputVertexList.push(prevPoint);
-                outputVertexList.push(this.getIntersection(prevPoint, curPoint));
-            }
-            else if (!prevVisible && curVisible) {
-                var t = this.getPercent(curPoint.position, prevPoint.position)
-                outputVertexList.push(this.getIntersection(curPoint, prevPoint));
-            }
-            prevPoint = curPoint;
-            prevVisible = curVisible;
+            inputVertexList = outputVertexList;
         }
 
-        var rc: Vertex3D[][] = new Array();
-        if (outputVertexList.length >= 3) {
-            var triangle = new Array();
-            triangle.push(outputVertexList[0], outputVertexList[1], outputVertexList[2]);
-            rc.push(triangle);
-            if (outputVertexList.length >= 4) {
-                var triangle = new Array();
-                triangle.push(outputVertexList[0], outputVertexList[2], outputVertexList[3]);
-                rc.push(triangle);
-            }
-        }
 
-        return rc;
+
+
+        return inputVertexList;
     }
 
-    static getIntersection(pInside: Vertex3D, pOutside: Vertex3D) {
-        var t = this.getPercent(pInside.position, pOutside.position);
+    static getIntersection(pInside: Vertex3D, pOutside: Vertex3D, plane: Vector4) {
+        var t = this.getPercent(pInside.position, pOutside.position, plane);
         var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1 - t));
         var newColor = pInside.color.multi(t).add(pOutside.color.multi(1 - t));
         var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1 - t));
         return new Vertex3D(newPoint, newColor, newUv);
     }
 
-    static getPercent(pInside: Vector4, pOutside: Vector4): number {
-        var t = 0;
-        if (pOutside.x <= -1 * pOutside.w) { // x+w < 0
-            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w)))
-        }
-
-        if (pOutside.x >= pOutside.w) { // x-w > 0
-            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w)))
-        }
-
-        if (pOutside.y <= -1 * pOutside.w) { // y+w < 0
-            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w)))
-        }
-
-        if (pOutside.y >= pOutside.w) { // y-w > 0
-            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w)))
-        }
-
-        if (pOutside.z <= -1 * pOutside.w) { // z+w < 0
-            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w)))
-        }
-
-        if (pOutside.z >= pOutside.w) { // z-w > 0
-            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w)))
-        }
+    static getPercent(pInside: Vector4, pOutside: Vector4, plane: Vector4): number {
+        var t = pOutside.dot(plane) / (pOutside.dot(plane) - pInside.dot(plane));
         return t;
     }
 
-    static isVisible(v: Vertex3D): boolean {
-        return (v.x <= v.w) && (v.x >= -1 * v.w)
-            && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
+    static isVisible(v: Vertex3D, plane: Vector4): boolean {
+        return v.position.dot(plane) > 0;
     }
 }
 
@@ -764,7 +758,7 @@ class Scene3D {
         this.objectArray.push(obj);
     }
 
-    public render(mode: RenderMode) {
+    public render() {
 
         this.screen.rasterizer.prepare();
         for (var o = 0; o < this.objectArray.length; o++) {
@@ -799,8 +793,24 @@ class Scene3D {
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
 
-                        var pcList: Vertex3D[][] = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
-                        this.rasterizeTriangles(pcList);
+                        var pcList: Vertex3D[] = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
+
+                        if (obj.renderMode == RenderMode.Wireframe) {
+                            
+                            for (var j = 0; j < pcList.length; j++) {
+                                var ps0 = this.clipToScreen(pcList[j]);
+                                var ps1 = this.clipToScreen(pcList[(j + 1) % pcList.length]);
+                                this.screen.rasterizer.rasterizeLine(ps0, ps1);
+                            }
+
+                        } else {
+                            for (var j = 2; j < pcList.length; j++) {
+                                var ps0 = this.clipToScreen(pcList[0]);
+                                var ps1 = this.clipToScreen(pcList[j - 1]);
+                                var ps2 = this.clipToScreen(pcList[j]);
+                                this.screen.rasterizer.rasterizeTriangle(ps0, ps1, ps2);
+                            }
+                        }
 
                     }
 
@@ -809,30 +819,23 @@ class Scene3D {
 
         }
         this.screen.commit();
-        requestAnimationFrame(() => this.render(mode));
+        requestAnimationFrame(() => this.render());
     }
 
-    rasterizeTriangles(pcList: Vertex3D[][]) {
-        for (var i = 0; i < pcList.length; i++) {
-            var psList = this.clipToScreen(pcList[i]);
-            this.screen.rasterizer.rasterizeTriangle(psList[0], psList[1], psList[2]);
-        }
+
+
+    clipToScreen(pc: Vertex3D): Vertex3D {
+
+
+        var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
+        ps.w = pc.w;
+        return new Vertex3D(ps, pc.color, pc.uv);
+
     }
 
-    clipToScreen(pcList: Vertex3D[]): Vertex3D[] {
-        var psList = new Array();
-        for (var j = 0; j < pcList.length; j++) {
-            var pc = pcList[j];
-            var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
-            ps.w = pc.w;
-            psList.push(new Vertex3D(ps, pc.color, pc.uv));
-        }
-        return psList;
-    }
+    public start() {
 
-    public start(mode: RenderMode) {
-
-        requestAnimationFrame(() => this.render(mode));
+        requestAnimationFrame(() => this.render());
 
         window.addEventListener("keypress", (e) => this.onKeyDown(e), false)
     }

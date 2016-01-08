@@ -283,20 +283,37 @@ var Rasterizer = (function () {
         }
     };
     Rasterizer.prototype.drawPixel = function (r, g, b, a, x, y) {
+        if (x >= this.imageData.width)
+            x = this.imageData.width - 1;
+        if (y >= this.imageData.height)
+            y = this.imageData.height - 1;
         var offset = 4 * (y * this.imageData.width + x);
         this.imageData.data[offset + 0] = r;
         this.imageData.data[offset + 1] = g;
         this.imageData.data[offset + 2] = b;
         this.imageData.data[offset + 3] = a;
     };
-    Rasterizer.prototype.rasterizeLine = function (top, bottom) {
-        var diffY = bottom.y - top.y;
-        var diffX = bottom.x - top.x;
+    Rasterizer.prototype.rasterizeLine = function (pa, pb) {
+        var diffY = pb.y - pa.y;
+        var diffX = pb.x - pa.x;
         if (Math.abs(diffY) > Math.abs(diffX)) {
+            var top, bottom;
+            if (pa.y < pb.y) {
+                top = pa;
+                bottom = pb;
+            }
+            else {
+                top = pb;
+                bottom = pa;
+            }
             var startY = Math.round(top.y);
             var endY = Math.round(bottom.y);
             for (var y = startY; y < endY; y++) {
                 var t = (y - top.y) / (bottom.y - top.y);
+                if (t < 0)
+                    t = 0;
+                if (t > 1)
+                    t = 1;
                 var x = Math.round(top.x * (1 - t) + bottom.x * t);
                 var z = Math.round(top.w * (1 - t) + bottom.w * t);
                 if (this.testZ(x, y, z)) {
@@ -306,18 +323,22 @@ var Rasterizer = (function () {
         }
         else {
             var left, right;
-            if (top.x > bottom.x) {
-                left = bottom;
-                right = top;
+            if (pa.x > pb.x) {
+                left = pb;
+                right = pa;
             }
             else {
-                left = top;
-                right = bottom;
+                left = pa;
+                right = pb;
             }
             var startX = Math.round(left.x);
             var endX = Math.round(right.x);
             for (var x = startX; x < endX; x++) {
                 var t = (x - left.x) / (right.x - left.x);
+                if (t < 0)
+                    t = 0;
+                if (t > 1)
+                    t = 1;
                 var y = Math.round(left.y * (1 - t) + right.y * t);
                 var z = Math.round(left.w * (1 - t) + right.w * t);
                 if (this.testZ(x, y, z)) {
@@ -342,34 +363,27 @@ var Rasterizer = (function () {
         var pa = vertexArray[0];
         var pb = vertexArray[1];
         var pc = vertexArray[2];
-        if (this.mode == RenderMode.Wireframe) {
-            this.rasterizeLine(pa, pb);
-            this.rasterizeLine(pa, pc);
-            this.rasterizeLine(pb, pc);
+        var diffYup = Math.ceil(pb.y - pa.y);
+        /**
+         * Y/X会导致不统一，换成X/Y
+         */
+        var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
+        var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
+        var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
+        var roundAy = Math.round(pa.y);
+        var roundBy = Math.round(pb.y);
+        var roundCy = Math.round(pc.y);
+        if (gradientAC < gradientAB) {
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
         }
         else {
-            var diffYup = Math.ceil(pb.y - pa.y);
-            /**
-             * Y/X会导致不统一，换成X/Y
-             */
-            var gradientBC = (pc.x - pb.x) / (pc.y - pb.y);
-            var gradientAB = (pb.x - pa.x) / (pb.y - pa.y);
-            var gradientAC = (pc.x - pa.x) / (pc.y - pa.y);
-            var roundAy = Math.round(pa.y);
-            var roundBy = Math.round(pb.y);
-            var roundCy = Math.round(pc.y);
-            if (gradientAC < gradientAB) {
-                this.rasterizeTrapezoid(roundAy, roundBy, pa, pc, pa, pb);
-            }
-            else {
-                this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
-            }
-            if (gradientBC < gradientAC) {
-                this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
-            }
-            else {
-                this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
-            }
+            this.rasterizeTrapezoid(roundAy, roundBy, pa, pb, pa, pc);
+        }
+        if (gradientBC < gradientAC) {
+            this.rasterizeTrapezoid(roundBy, roundCy, pa, pc, pb, pc);
+        }
+        else {
+            this.rasterizeTrapezoid(roundBy, roundCy, pb, pc, pa, pc);
         }
     };
     return Rasterizer;
@@ -570,76 +584,56 @@ var ClippAlgorithm = (function () {
      */
     ClippAlgorithm.clip = function (pc0, pc1, pc2) {
         var inputVertexList = new Array();
-        var outputVertexList = new Array();
+        inputVertexList.push(pc0);
         inputVertexList.push(pc1);
         inputVertexList.push(pc2);
-        inputVertexList.push(pc0);
-        var prevPoint = pc0;
-        var prevVisible = this.isVisible(pc0);
-        for (var i = 0; i < inputVertexList.length; i++) {
-            var curPoint = inputVertexList[i];
-            var curVisible = this.isVisible(curPoint);
-            if (prevVisible && curVisible) {
-                outputVertexList.push(prevPoint);
+        for (var p = 0; p < ClippAlgorithm.planes.length && inputVertexList.length >= 3; p++) {
+            var plane = ClippAlgorithm.planes[p];
+            var outputVertexList = new Array();
+            var prevPoint = inputVertexList[inputVertexList.length - 1];
+            var prevVisible = this.isVisible(prevPoint, plane);
+            for (var i = 0; i < inputVertexList.length; i++) {
+                var curPoint = inputVertexList[i];
+                var curVisible = this.isVisible(curPoint, plane);
+                if (prevVisible && curVisible) {
+                    outputVertexList.push(prevPoint);
+                }
+                else if (prevVisible && !curVisible) {
+                    outputVertexList.push(prevPoint);
+                    outputVertexList.push(this.getIntersection(prevPoint, curPoint, plane));
+                }
+                else if (!prevVisible && curVisible) {
+                    outputVertexList.push(this.getIntersection(curPoint, prevPoint, plane));
+                }
+                prevPoint = curPoint;
+                prevVisible = curVisible;
             }
-            else if (prevVisible && !curVisible) {
-                var t = this.getPercent(prevPoint.position, curPoint.position);
-                outputVertexList.push(prevPoint);
-                outputVertexList.push(this.getIntersection(prevPoint, curPoint));
-            }
-            else if (!prevVisible && curVisible) {
-                var t = this.getPercent(curPoint.position, prevPoint.position);
-                outputVertexList.push(this.getIntersection(curPoint, prevPoint));
-            }
-            prevPoint = curPoint;
-            prevVisible = curVisible;
+            inputVertexList = outputVertexList;
         }
-        var rc = new Array();
-        if (outputVertexList.length >= 3) {
-            var triangle = new Array();
-            triangle.push(outputVertexList[0], outputVertexList[1], outputVertexList[2]);
-            rc.push(triangle);
-            if (outputVertexList.length >= 4) {
-                var triangle = new Array();
-                triangle.push(outputVertexList[0], outputVertexList[2], outputVertexList[3]);
-                rc.push(triangle);
-            }
-        }
-        return rc;
+        return inputVertexList;
     };
-    ClippAlgorithm.getIntersection = function (pInside, pOutside) {
-        var t = this.getPercent(pInside.position, pOutside.position);
+    ClippAlgorithm.getIntersection = function (pInside, pOutside, plane) {
+        var t = this.getPercent(pInside.position, pOutside.position, plane);
         var newPoint = pInside.position.multi(t).add(pOutside.position.multi(1 - t));
         var newColor = pInside.color.multi(t).add(pOutside.color.multi(1 - t));
         var newUv = pInside.uv.multi(t).add(pOutside.uv.multi(1 - t));
         return new Vertex3D(newPoint, newColor, newUv);
     };
-    ClippAlgorithm.getPercent = function (pInside, pOutside) {
-        var t = 0;
-        if (pOutside.x <= -1 * pOutside.w) {
-            t = Math.max(t, (pOutside.x + pOutside.w) / ((pOutside.x + pOutside.w) - (pInside.x + pInside.w)));
-        }
-        if (pOutside.x >= pOutside.w) {
-            t = Math.max(t, (pOutside.x - pOutside.w) / ((pOutside.x - pOutside.w) - (pInside.x - pInside.w)));
-        }
-        if (pOutside.y <= -1 * pOutside.w) {
-            t = Math.max(t, (pOutside.y + pOutside.w) / ((pOutside.y + pOutside.w) - (pInside.y + pInside.w)));
-        }
-        if (pOutside.y >= pOutside.w) {
-            t = Math.max(t, (pOutside.y - pOutside.w) / ((pOutside.y - pOutside.w) - (pInside.y - pInside.w)));
-        }
-        if (pOutside.z <= -1 * pOutside.w) {
-            t = Math.max(t, (pOutside.z + pOutside.w) / ((pOutside.z + pOutside.w) - (pInside.z + pInside.w)));
-        }
-        if (pOutside.z >= pOutside.w) {
-            t = Math.max(t, (pOutside.z - pOutside.w) / ((pOutside.z - pOutside.w) - (pInside.z - pInside.w)));
-        }
+    ClippAlgorithm.getPercent = function (pInside, pOutside, plane) {
+        var t = pOutside.dot(plane) / (pOutside.dot(plane) - pInside.dot(plane));
         return t;
     };
-    ClippAlgorithm.isVisible = function (v) {
-        return (v.x <= v.w) && (v.x >= -1 * v.w)
-            && (v.y <= v.w) && (v.y >= v.w * -1) && (v.z <= v.w) && (v.z >= v.w * -1);
+    ClippAlgorithm.isVisible = function (v, plane) {
+        return v.position.dot(plane) > 0;
     };
+    ClippAlgorithm.planes = [
+        new Vector4(1, 0, 0, 1),
+        new Vector4(-1, 0, 0, 1),
+        new Vector4(0, 1, 0, 1),
+        new Vector4(0, -1, 0, 1),
+        new Vector4(0, 0, 1, 1),
+        new Vector4(0, 0, -1, 1)
+    ];
     return ClippAlgorithm;
 })();
 var Scene3D = (function () {
@@ -651,7 +645,7 @@ var Scene3D = (function () {
     Scene3D.prototype.addObject = function (obj) {
         this.objectArray.push(obj);
     };
-    Scene3D.prototype.render = function (mode) {
+    Scene3D.prototype.render = function () {
         var _this = this;
         this.screen.rasterizer.prepare();
         for (var o = 0; o < this.objectArray.length; o++) {
@@ -680,33 +674,36 @@ var Scene3D = (function () {
                         var pc1 = pv1.transform(this.camera.view2Clipping);
                         var pc2 = pv2.transform(this.camera.view2Clipping);
                         var pcList = ClippAlgorithm.clip(new Vertex3D(pc0, pm0.color, pm0.uv), new Vertex3D(pc1, pm1.color, pm1.uv), new Vertex3D(pc2, pm2.color, pm2.uv));
-                        this.rasterizeTriangles(pcList);
+                        if (obj.renderMode == RenderMode.Wireframe) {
+                            for (var j = 0; j < pcList.length; j++) {
+                                var ps0 = this.clipToScreen(pcList[j]);
+                                var ps1 = this.clipToScreen(pcList[(j + 1) % pcList.length]);
+                                this.screen.rasterizer.rasterizeLine(ps0, ps1);
+                            }
+                        }
+                        else {
+                            for (var j = 2; j < pcList.length; j++) {
+                                var ps0 = this.clipToScreen(pcList[0]);
+                                var ps1 = this.clipToScreen(pcList[j - 1]);
+                                var ps2 = this.clipToScreen(pcList[j]);
+                                this.screen.rasterizer.rasterizeTriangle(ps0, ps1, ps2);
+                            }
+                        }
                     }
                 }
             }
         }
         this.screen.commit();
-        requestAnimationFrame(function () { return _this.render(mode); });
+        requestAnimationFrame(function () { return _this.render(); });
     };
-    Scene3D.prototype.rasterizeTriangles = function (pcList) {
-        for (var i = 0; i < pcList.length; i++) {
-            var psList = this.clipToScreen(pcList[i]);
-            this.screen.rasterizer.rasterizeTriangle(psList[0], psList[1], psList[2]);
-        }
+    Scene3D.prototype.clipToScreen = function (pc) {
+        var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
+        ps.w = pc.w;
+        return new Vertex3D(ps, pc.color, pc.uv);
     };
-    Scene3D.prototype.clipToScreen = function (pcList) {
-        var psList = new Array();
-        for (var j = 0; j < pcList.length; j++) {
-            var pc = pcList[j];
-            var ps = pc.position.perspectiveDivide().transform(this.screen.ndc2screen);
-            ps.w = pc.w;
-            psList.push(new Vertex3D(ps, pc.color, pc.uv));
-        }
-        return psList;
-    };
-    Scene3D.prototype.start = function (mode) {
+    Scene3D.prototype.start = function () {
         var _this = this;
-        requestAnimationFrame(function () { return _this.render(mode); });
+        requestAnimationFrame(function () { return _this.render(); });
         window.addEventListener("keypress", function (e) { return _this.onKeyDown(e); }, false);
     };
     Scene3D.prototype.onKeyDown = function (e) {
