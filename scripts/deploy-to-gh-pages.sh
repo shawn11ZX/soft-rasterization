@@ -9,9 +9,6 @@ mkdir public
 git config --global user.email "sure.zhang@gmail.com"
 git config --global user.name "Shawn"
 
-# build (CHANGE THIS)
-make
-
 # deploy
 cd public
 git init
