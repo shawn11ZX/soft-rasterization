@@ -6,4 +6,4 @@ set -o errexit
 git config --global user.email "sure.zhang@gmail.com"
 git config --global user.name "Shawn"
 
-git push --force --quiet "https://${GITHUB_TOKEN}@$github.com/${GITHUB_REPO}.git" master:gh-pages
+git push --force --quiet "https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git" master:gh-pages
